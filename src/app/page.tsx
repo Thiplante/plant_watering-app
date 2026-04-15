@@ -12,12 +12,15 @@ export default function HomePage() {
 
   useEffect(() => {
     async function init() {
+      // 1. Récupérer la session actuelle
       const { data: { session }, error } = await supabase.auth.getSession();
+      
       if (error || !session) {
         router.push("/login");
         return;
       }
-      // On passe l'ID et l'email de l'utilisateur connecté
+
+      // 2. Charger les plantes avec l'ID et l'Email
       await loadPlants(session.user.id, session.user.email!);
     }
     init();
@@ -26,9 +29,9 @@ export default function HomePage() {
   const loadPlants = async (userId: string, userEmail: string) => {
     try {
       setLoading(true);
-      const emailLower = userEmail.toLowerCase();
+      const emailLower = userEmail.toLowerCase().trim();
 
-      // On récupère les plantes dont on est proprio OU invité
+      // Requête complète : mes plantes OU plantes partagées avec mon mail
       const { data, error } = await supabase
         .from("plants")
         .select("*")
@@ -59,14 +62,17 @@ export default function HomePage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F0FDF4]">
-        <p className="font-bold text-green-800 animate-pulse">Chargement de ta jungle...</p>
+        <div className="text-center">
+          <p className="text-4xl mb-4 animate-bounce">🌱</p>
+          <p className="font-black text-green-900 uppercase tracking-widest text-sm">Chargement...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#F0FDF4] text-black">
-      <nav className="flex items-center justify-between bg-white px-6 py-4 shadow-sm">
+      <nav className="flex items-center justify-between bg-white px-6 py-4 shadow-sm border-b border-green-100">
         <div className="flex items-center gap-2">
           <span className="text-2xl">🌱</span>
           <span className="text-xl font-black text-gray-800 tracking-tight">Plant Watering</span>
@@ -75,40 +81,40 @@ export default function HomePage() {
       </nav>
 
       <main className="mx-auto max-w-6xl p-6">
-        <div className="mb-10 rounded-[32px] bg-white p-8 shadow-sm border border-green-100 flex justify-between items-center">
+        <div className="mb-10 rounded-[40px] bg-white p-8 shadow-sm border border-green-100 flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
-            <h1 className="text-4xl font-black text-gray-900 mb-2">Mes Plantes 🌿</h1>
-            <p className="text-gray-500 font-medium">Tes plantes et celles partagées avec toi.</p>
+            <h1 className="text-4xl font-black text-gray-900 mb-2 tracking-tighter">Ma Jungle 🌿</h1>
+            <p className="text-gray-500 font-medium">Tes plantes et celles de tes proches.</p>
           </div>
-          <Link href="/plants/new" className="rounded-2xl bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700 transition shadow-lg">
-            + Ajouter
+          <Link href="/plants/new" className="w-full md:w-auto text-center rounded-2xl bg-green-600 px-8 py-4 font-bold text-white hover:bg-green-700 transition shadow-lg shadow-green-200">
+            + Ajouter une plante
           </Link>
         </div>
 
         {plants.length === 0 ? (
-          <div className="bg-white rounded-[32px] p-20 text-center border-2 border-dashed border-green-100">
-            <p className="text-gray-400">Aucune plante trouvée.</p>
+          <div className="bg-white rounded-[40px] p-20 text-center border-2 border-dashed border-green-200">
+            <p className="text-gray-400 font-bold italic">Aucune plante pour le moment...</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {plants.map((plant) => (
-              <Link key={plant.id} href={`/plants/${plant.id}`} className="group block rounded-[32px] bg-white p-6 shadow-sm hover:shadow-md transition-all border border-transparent hover:border-green-500">
+              <Link key={plant.id} href={`/plants/${plant.id}`} className="group block rounded-[32px] bg-white p-6 shadow-sm hover:shadow-xl transition-all border border-transparent hover:border-green-500 active:scale-95">
                 <div className="flex justify-between items-start mb-6">
-                  <h3 className="text-2xl font-black tracking-tight">{plant.name}</h3>
-                  <span className="text-[10px] font-black bg-gray-100 px-2 py-1 rounded-lg">
-                    {plant.watering_frequency_days}j
+                  <h3 className="text-2xl font-black tracking-tighter text-gray-800">{plant.name}</h3>
+                  <span className="text-[10px] font-black bg-gray-100 px-3 py-1 rounded-full text-gray-500">
+                    TOUS LES {plant.watering_frequency_days}J
                   </span>
                 </div>
                 
-                <div className="space-y-3 mb-4">
+                <div className="space-y-3">
                   <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
-                    <p className="text-[10px] font-bold text-green-600 uppercase mb-1">Prochain arrosage</p>
-                    <p className="font-black text-green-800 text-lg">
+                    <p className="text-[10px] font-bold text-green-600 uppercase mb-1 tracking-widest">Prochain arrosage</p>
+                    <p className="font-black text-green-900 text-lg">
                       {getNextWateringDate(plant.last_watered_at, plant.watering_frequency_days)}
                     </p>
                   </div>
                   <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Dernier</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest">Dernier</p>
                     <p className="font-bold text-gray-700">
                       {plant.last_watered_at ? new Date(plant.last_watered_at).toLocaleDateString('fr-FR') : "Jamais"}
                     </p>
