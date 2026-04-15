@@ -14,9 +14,9 @@ export default function PlantDetailPage({ params }: { params: any }) {
   const [plant, setPlant] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newName, setNewName] = useState("");
+  const [shareEmail, setShareEmail] = useState("");
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -34,63 +34,50 @@ export default function PlantDetailPage({ params }: { params: any }) {
     setLoading(false);
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
-  };
-
   const handleUpdateName = async () => {
-    await supabase.from("plants").update({ name: newName }).eq("id", plantId);
+    await supabase.from("plants").update({ name: newName }).eq( "id", plantId);
     setIsEditing(false);
     loadData();
   };
 
   const handleWaterPlant = async () => {
     const now = new Date().toISOString();
-    const { data: auth } = await supabase.auth.getUser();
-    
-    if (!auth.user) {
-      alert("Tu dois être connecté pour arroser !");
-      router.push("/login");
-      return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
+      await supabase.from("watering_logs").insert({ plant_id: plantId, watered_at: now, user_id: session.user.id });
+      loadData();
     }
+  };
 
-    await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
-    await supabase.from("watering_logs").insert({ 
-      plant_id: plantId, 
-      watered_at: now, 
-      user_id: auth.user.id 
-    });
-    loadData();
+  const handleShare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.from("plant_shares").insert({ plant_id: plantId, user_email: shareEmail.toLowerCase().trim() });
+    if (error) alert("Erreur : " + error.message);
+    else {
+      alert("Plante partagée avec succès !");
+      setShareEmail("");
+    }
   };
 
   const handleDelete = async () => {
-    if (!confirm("Supprimer cette plante définitivement ?")) return;
+    if (!confirm("Voulez-vous vraiment retirer cette plante ?")) return;
     const { error } = await supabase.from("plants").delete().eq("id", plantId);
     if (error) alert("Erreur : " + error.message);
     else router.push("/");
   };
 
-  if (loading) return <div className="p-20 text-center font-bold">Chargement...</div>;
-  if (!plant) return <div className="p-20 text-center">Plante introuvable.</div>;
+  if (loading) return <div className="p-20 text-center font-bold italic">Chargement...</div>;
+  if (!plant) return <div className="p-20 text-center text-red-500 font-bold">Plante introuvable.</div>;
 
   return (
     <main className="min-h-screen bg-white p-6 sm:p-12 text-black">
       <div className="mx-auto max-w-2xl">
         <div className="flex justify-between items-center mb-10">
           <Link href="/" className="text-sm font-bold text-gray-400 hover:text-black transition">← RETOUR</Link>
-          <div className="flex gap-2">
-            <button 
-              onClick={handleCopyLink}
-              className="bg-gray-100 text-gray-600 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200 transition"
-            >
-              {copySuccess ? "Copié ! ✅" : "Partager 🔗"}
-            </button>
-            <button onClick={handleWaterPlant} className="bg-black text-white px-8 py-3 rounded-full font-bold text-sm shadow-xl active:scale-95 transition">
-              ARROSÉ 💧
-            </button>
-          </div>
+          <button onClick={handleWaterPlant} className="bg-black text-white px-8 py-3 rounded-full font-bold text-sm shadow-xl active:scale-95 transition">
+            J'AI ARROSÉ 💧
+          </button>
         </div>
 
         <div className="mb-12">
@@ -107,38 +94,56 @@ export default function PlantDetailPage({ params }: { params: any }) {
           )}
         </div>
 
+        {/* SECTION PARTAGE */}
+        <div className="mb-10 p-6 bg-blue-50 rounded-[32px] border border-blue-100">
+          <h3 className="text-sm font-black text-blue-900 mb-4 uppercase tracking-widest">Partager avec un proche</h3>
+          <form onSubmit={handleShare} className="flex gap-2">
+            <input 
+              type="email" 
+              placeholder="Email de son compte..." 
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.target.value)}
+              className="flex-1 px-4 py-3 rounded-2xl border-none text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+              required
+            />
+            <button type="submit" className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold text-xs hover:bg-blue-700 transition">
+              Inviter
+            </button>
+          </form>
+        </div>
+
         <div className="grid grid-cols-2 gap-4 mb-12">
           <div className="bg-gray-50 p-6 rounded-[24px]">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fréquence</p>
-            <p className="font-bold text-xl">{plant.watering_frequency_days}j</p>
+            <p className="font-bold text-xl">{plant.watering_frequency_days} jours</p>
           </div>
           <div className="bg-gray-50 p-6 rounded-[24px]">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dernier</p>
-            <p className="font-bold text-xl">{plant.last_watered_at ? new Date(plant.last_watered_at).toLocaleDateString() : "---"}</p>
+            <p className="font-bold text-xl">{plant.last_watered_at ? new Date(plant.last_watered_at).toLocaleDateString() : "Jamais"}</p>
           </div>
         </div>
 
         <div className="mb-20">
-          <h2 className="text-xl font-black mb-6">Historique</h2>
+          <h2 className="text-xl font-black mb-6">Historique des soins</h2>
           <div className="space-y-3">
             {history.length > 0 ? (
               history.map((log) => (
                 <div key={log.id} className="flex justify-between items-center p-5 bg-white border border-gray-100 rounded-2xl shadow-sm">
-                  <span className="font-bold text-gray-800">Arrosage</span>
+                  <span className="font-bold text-gray-800">Arrosage effectué</span>
                   <span className="text-gray-400 text-sm font-medium">
                     {new Date(log.watered_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               ))
             ) : (
-              <p className="text-gray-400 italic text-center py-10">Aucun historique.</p>
+              <p className="text-gray-400 italic text-center py-10">Aucun historique disponible.</p>
             )}
           </div>
         </div>
 
         <div className="border-t border-gray-100 pt-10 text-center">
           <button onClick={handleDelete} className="text-red-300 text-xs font-bold uppercase tracking-widest hover:text-red-600 transition">
-            🗑️ Supprimer la plante
+            🗑️ Retirer cette plante
           </button>
         </div>
       </div>
