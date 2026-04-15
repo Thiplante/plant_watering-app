@@ -1,12 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function NewPlantPage() {
   const [name, setName] = useState("");
   const [frequency, setFrequency] = useState(3);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        window.location.replace("/login");
+        return;
+      }
+
+      setLoading(false);
+    };
+
+    checkUser();
+  }, []);
 
   const handleCreate = async () => {
     const {
@@ -14,7 +32,7 @@ export default function NewPlantPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      alert("Tu dois être connecté");
+      window.location.replace("/login");
       return;
     }
 
@@ -32,18 +50,25 @@ export default function NewPlantPage() {
     }
   };
 
+  if (loading) return null;
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <Link href="/" className="text-sm font-medium text-green-700 hover:text-green-800">
+          <Link
+            href="/"
+            className="text-sm font-medium text-green-700 hover:text-green-800"
+          >
             ← Retour à mes plantes
           </Link>
         </div>
 
         <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-8">
           <div className="mb-6">
-            <p className="text-sm font-medium text-green-700">Nouvelle plante</p>
+            <p className="text-sm font-medium text-green-700">
+              Nouvelle plante
+            </p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
               Ajouter une plante 🌿
             </h1>

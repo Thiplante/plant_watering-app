@@ -26,6 +26,7 @@ export default function PlantDetailPage({
   const [logs, setLogs] = useState<WateringLog[]>([]);
   const [plantId, setPlantId] = useState("");
   const [shareEmail, setShareEmail] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const loadData = async (id: string) => {
     const { data: plantData, error: plantError } = await supabase
@@ -57,10 +58,21 @@ export default function PlantDetailPage({
 
   useEffect(() => {
     const init = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        window.location.href = "/login";
+        return;
+      }
+
       const resolvedParams = await params;
       const id = resolvedParams.id;
+
       setPlantId(id);
       await loadData(id);
+      setLoading(false);
     };
 
     init();
@@ -73,6 +85,7 @@ export default function PlantDetailPage({
 
     if (!user || !plantId) {
       alert("Tu dois être connecté");
+      window.location.href = "/login";
       return;
     }
 
@@ -143,12 +156,24 @@ export default function PlantDetailPage({
     return last.toLocaleDateString();
   };
 
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
+        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-black/5">
+            Chargement...
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   if (!plant) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-        <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-black/5">
-            Chargement...
+            Plante introuvable.
           </div>
         </div>
       </main>
@@ -159,7 +184,10 @@ export default function PlantDetailPage({
     <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <Link href="/" className="text-sm font-medium text-green-700 hover:text-green-800">
+          <Link
+            href="/"
+            className="text-sm font-medium text-green-700 hover:text-green-800"
+          >
             ← Retour à mes plantes
           </Link>
         </div>
@@ -220,7 +248,8 @@ export default function PlantDetailPage({
               Partager la plante
             </h2>
             <p className="mt-1 text-sm text-gray-600">
-              Ajoute l’email d’une personne pour qu’elle puisse suivre cette plante.
+              Ajoute l’email d’une personne pour qu’elle puisse suivre cette
+              plante.
             </p>
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">

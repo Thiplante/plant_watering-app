@@ -65,8 +65,21 @@ export default function Home() {
   };
 
   useEffect(() => {
+  const initPage = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      window.location.href = "/login";
+      return;
+    }
+
     fetchPlants();
-  }, []);
+  };
+
+  initPage();
+}, []);
 
   const handleWaterPlant = async (plantId: string) => {
     const {
