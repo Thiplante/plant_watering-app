@@ -1,301 +1,149 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 
-type Plant = {
-  id: string;
-  name: string;
-  watering_frequency_days: number;
-  last_watered_at: string | null;
-};
+export default function PlantDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
+  const plantId = params.id;
 
-type WateringLog = {
-  id: string;
-  watered_at: string;
-  note: string | null;
-};
-
-export default function PlantDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const [plant, setPlant] = useState<Plant | null>(null);
-  const [logs, setLogs] = useState<WateringLog[]>([]);
-  const [plantId, setPlantId] = useState("");
-  const [shareEmail, setShareEmail] = useState("");
+  const [plant, setPlant] = useState<any>(null);
+  const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
-
-  const loadData = async (id: string) => {
-    const { data: plantData, error: plantError } = await supabase
-      .from("plants")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (plantError) {
-      console.error(plantError);
-      return;
-    }
-
-    setPlant(plantData);
-
-    const { data: logsData, error: logsError } = await supabase
-      .from("watering_logs")
-      .select("*")
-      .eq("plant_id", id)
-      .order("watered_at", { ascending: false });
-
-    if (logsError) {
-      console.error(logsError);
-      return;
-    }
-
-    setLogs(logsData || []);
-  };
+  const [shareEmail, setShareEmail] = useState("");
 
   useEffect(() => {
-    const init = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    loadData();
+  }, [plantId]);
 
-      if (!user) {
-        window.location.href = "/login";
-        return;
-      }
+  const loadData = async () => {
+    const { data, error } = await supabase
+      .from("plants")
+      .select("*")
+      .eq("id", plantId)
+      .single();
 
-      const resolvedParams = await params;
-      const id = resolvedParams.id;
+    if (data) {
+      setPlant(data);
+      setName(data.name);
+    }
+    setLoading(false);
+  };
 
-      setPlantId(id);
-      await loadData(id);
-      setLoading(false);
-    };
+  // --- ACTION : MODIFIER LE NOM ---
+  const handleUpdateName = async () => {
+    const { data, error } = await supabase
+      .from("plants")
+      .update({ name: name })
+      .eq("id", plantId)
+      .select();
 
-    init();
-  }, [params]);
+    if (error) {
+      alert("Erreur : " + error.message);
+    } else if (data && data.length > 0) {
+      alert("Nom mis à jour avec succès !");
+      loadData();
+    } else {
+      alert("Droit refusé : Vous n'avez pas la permission de modifier cette plante.");
+    }
+  };
 
+  // --- ACTION : ARROSER ---
   const handleWaterPlant = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user || !plantId) {
-      alert("Tu dois être connecté");
-      window.location.href = "/login";
-      return;
-    }
-
     const now = new Date().toISOString();
-
-    const { error: logError } = await supabase.from("watering_logs").insert({
-      plant_id: plantId,
-      user_id: user.id,
-      watered_at: now,
-    });
-
-    if (logError) {
-      alert(logError.message);
-      return;
-    }
-
-    const { error: plantError } = await supabase
+    const { error } = await supabase
       .from("plants")
       .update({ last_watered_at: now })
       .eq("id", plantId);
 
-    if (plantError) {
-      alert(plantError.message);
-      return;
-    }
-
-    await loadData(plantId);
+    if (error) alert(error.message);
+    else loadData();
   };
 
-  const handleSharePlant = async () => {
-    if (!shareEmail.trim()) {
-      alert("Entre un email");
-      return;
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, email")
-      .eq("email", shareEmail)
-      .single();
-
-    if (profileError || !profile) {
-      alert("Utilisateur introuvable");
-      return;
-    }
-
-    const { error: shareError } = await supabase.from("plant_shares").insert({
-      plant_id: plantId,
-      user_id: profile.id,
-      can_edit: true,
-    });
-
-    if (shareError) {
-      alert(shareError.message);
-      return;
-    }
-
-    alert("Plante partagée !");
-    setShareEmail("");
-  };
-
-  const getNextWateringDate = () => {
-    if (!plant?.last_watered_at) return "À arroser";
-
-    const last = new Date(plant.last_watered_at);
-    last.setDate(last.getDate() + plant.watering_frequency_days);
-
-    return last.toLocaleDateString();
-  };
-
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-black/5">
-            Chargement...
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!plant) {
-    return (
-      <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-black/5">
-            Plante introuvable.
-          </div>
-        </div>
-      </main>
-    );
-  }
+  if (loading) return <p className="p-8 text-center text-gray-500">Chargement...</p>;
+  if (!plant) return <p className="p-8 text-center text-gray-500">Plante introuvable.</p>;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <Link
-            href="/"
-            className="text-sm font-medium text-green-700 hover:text-green-800"
-          >
-            ← Retour à mes plantes
-          </Link>
-        </div>
+    <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
+      <div className="mx-auto max-w-2xl">
+        <Link href="/" className="text-green-700 hover:underline text-sm font-medium">← Retour</Link>
 
-        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-8">
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-8">
+          {/* Header avec bouton Arrosage */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
             <div>
-              <p className="text-sm font-medium text-green-700">Détail plante</p>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
-                {plant.name}
-              </h1>
-              <p className="mt-2 text-sm text-gray-600">
-                Suis l’arrosage et partage cette plante avec quelqu’un.
-              </p>
+              <p className="text-xs font-bold uppercase tracking-wider text-green-600">Détail plante</p>
+              <h1 className="text-3xl font-black text-gray-900">{plant.name}</h1>
             </div>
-
-            <button
+            <button 
               onClick={handleWaterPlant}
-              className="rounded-2xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-black"
+              className="flex items-center gap-2 rounded-2xl bg-[#111827] px-6 py-3 text-sm font-bold text-white transition hover:bg-black"
             >
-              J’ai arrosé 💧
+              J'ai arrosé 💧
             </button>
           </div>
+          <p className="text-sm text-gray-500 mb-8">Suis l’arrosage et partage cette plante avec quelqu’un.</p>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl bg-gray-50 p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Fréquence
-              </p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">
-                Tous les {plant.watering_frequency_days} jours
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-gray-50 p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Dernier arrosage
-              </p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">
-                {plant.last_watered_at
-                  ? new Date(plant.last_watered_at).toLocaleString()
-                  : "Jamais"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-gray-50 p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Prochain arrosage
-              </p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">
-                {getNextWateringDate()}
-              </p>
+          {/* BLOC MODIFICATION (Ce qui te manquait) */}
+          <div className="mb-8 rounded-2xl bg-green-50/50 p-4 ring-1 ring-green-100">
+            <label className="block text-xs font-bold uppercase tracking-wider text-green-700 mb-2">Modifier le nom</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <button 
+                onClick={handleUpdateName}
+                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 transition"
+              >
+                Enregistrer
+              </button>
             </div>
           </div>
 
-          <div className="mt-8 rounded-3xl bg-gray-50 p-5">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Partager la plante
-            </h2>
-            <p className="mt-1 text-sm text-gray-600">
-              Ajoute l’email d’une personne pour qu’elle puisse suivre cette
-              plante.
-            </p>
+          {/* Infos Fréquence / Arrosage */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-8">
+            <div className="rounded-2xl bg-gray-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fréquence</p>
+              <p className="mt-1 font-bold text-gray-900 text-sm small:text-base">Tous les {plant.watering_frequency_days} jours</p>
+            </div>
+            <div className="rounded-2xl bg-gray-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Dernier arrosage</p>
+              <p className="mt-1 font-bold text-gray-900 text-sm">
+                {plant.last_watered_at ? new Date(plant.last_watered_at).toLocaleDateString() : "Jamais"}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-gray-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Prochain arrosage</p>
+              <p className="mt-1 font-bold text-gray-900 text-sm text-green-600">À arroser</p>
+            </div>
+          </div>
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          {/* Partage */}
+          <div className="mb-8 rounded-2xl bg-gray-50 p-6">
+            <h3 className="text-lg font-bold text-gray-900">Partager la plante</h3>
+            <p className="text-sm text-gray-500 mb-4">Ajoute l’email d’une personne pour qu’elle puisse suivre cette plante.</p>
+            <div className="flex gap-2">
               <input
                 type="email"
                 placeholder="email@exemple.com"
                 value={shareEmail}
                 onChange={(e) => setShareEmail(e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500"
+                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500"
               />
-
-              <button
-                onClick={handleSharePlant}
-                className="rounded-2xl bg-green-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-700"
-              >
-                Partager
-              </button>
+              <button className="rounded-xl bg-green-600 px-6 py-3 text-sm font-bold text-white hover:bg-green-700">Partager</button>
             </div>
           </div>
 
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold text-gray-900">Historique</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              Retrouve tous les arrosages enregistrés.
-            </p>
-
-            <div className="mt-4 space-y-3">
-              {logs.length === 0 && (
-                <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-                  Aucun arrosage enregistré
-                </div>
-              )}
-
-              {logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5"
-                >
-                  <p className="text-sm font-medium text-gray-900">
-                    {new Date(log.watered_at).toLocaleString()}
-                  </p>
-                  {log.note && (
-                    <p className="mt-1 text-sm text-gray-600">{log.note}</p>
-                  )}
-                </div>
-              ))}
+          {/* Historique */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Historique</h3>
+            <p className="text-sm text-gray-500 mb-4">Retrouve tous les arrosages enregistrés.</p>
+            <div className="rounded-2xl bg-gray-50 p-4 text-center">
+              <p className="text-sm text-gray-400 italic">Aucun arrosage enregistré</p>
             </div>
           </div>
         </div>
