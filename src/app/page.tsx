@@ -12,16 +12,11 @@ export default function HomePage() {
 
   useEffect(() => {
     async function init() {
-      // 1. On vérifie si l'utilisateur est connecté
       const { data: { session }, error } = await supabase.auth.getSession();
-      
       if (error || !session) {
-        console.log("Pas de session, redirection...");
         router.push("/login");
         return;
       }
-
-      // 2. Si on a une session, on charge les plantes
       await loadPlants(session.user.id);
     }
     init();
@@ -38,7 +33,7 @@ export default function HomePage() {
       if (error) throw error;
       setPlants(data || []);
     } catch (err) {
-      console.error("Erreur lors du chargement des plantes:", err);
+      console.error("Erreur chargement:", err);
     } finally {
       setLoading(false);
     }
@@ -46,15 +41,13 @@ export default function HomePage() {
 
   const handleWaterPlant = async (e: React.MouseEvent, plantId: string) => {
     e.preventDefault();
-    e.stopPropagation(); // Évite d'ouvrir la page de détail
+    e.stopPropagation();
     
     const now = new Date().toISOString();
     const { data: { session } } = await supabase.auth.getSession();
     
     if (session) {
-      // Mise à jour date principale
       await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
-      // Ajout historique
       await supabase.from("watering_logs").insert({ 
         plant_id: plantId, 
         watered_at: now, 
@@ -64,21 +57,20 @@ export default function HomePage() {
     }
   };
 
+  // Fonction pour calculer la date du prochain arrosage
+  const getNextWateringDate = (lastDate: string, frequency: number) => {
+    if (!lastDate) return "À faire !";
+    const date = new Date(lastDate);
+    date.setDate(date.getDate() + frequency);
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F0FDF4]">
-        <div className="text-center">
-          <div className="text-4xl animate-bounce mb-4">🌱</div>
-          <p className="text-gray-500 font-bold">Récupération de tes plantes...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-[#F0FDF4] font-bold">Chargement...</div>;
 
   return (
     <div className="min-h-screen bg-[#F0FDF4] text-black">
@@ -87,61 +79,61 @@ export default function HomePage() {
           <span className="text-2xl">🌱</span>
           <span className="text-xl font-black text-gray-800 tracking-tight">Plant Watering</span>
         </div>
-        <div className="flex items-center gap-4">
-          <button onClick={handleLogout} className="rounded-xl bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-200 transition">
-            Déconnexion
-          </button>
-        </div>
+        <button onClick={handleLogout} className="text-sm font-bold text-gray-400 hover:text-red-500 transition">Déconnexion</button>
       </nav>
 
       <main className="mx-auto max-w-6xl p-6">
-        <div className="mb-10 rounded-[32px] bg-white p-8 shadow-sm border border-green-100">
-          <h1 className="text-4xl font-black text-gray-900 mb-2">Bonjour ! 👋</h1>
-          <p className="text-gray-500 mb-6">Voici l'état de ta jungle urbaine.</p>
-          <Link
-            href="/plants/new"
-            className="inline-block rounded-2xl bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700 transition"
-          >
-            + Ajouter une plante
+        <div className="mb-10 rounded-[32px] bg-white p-8 shadow-sm border border-green-100 flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-black text-gray-900 mb-2">Ma Jungle 🌿</h1>
+            <p className="text-gray-500 font-medium">Ne laisse plus tes plantes avoir soif.</p>
+          </div>
+          <Link href="/plants/new" className="rounded-2xl bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700 transition shadow-lg shadow-green-100">
+            + Ajouter
           </Link>
         </div>
 
-        {plants.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-[32px] border-2 border-dashed border-gray-200">
-            <p className="text-gray-400">Tu n'as pas encore de plantes.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {plants.map((plant) => (
-              <Link 
-                key={plant.id} 
-                href={`/plants/${plant.id}`} 
-                className="group block rounded-[32px] bg-white p-6 shadow-sm border border-transparent hover:border-green-500 transition-all"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-xl font-black group-hover:text-green-600">{plant.name}</h3>
-                  <span className="text-xs font-bold bg-green-50 text-green-700 px-2 py-1 rounded-lg italic">
-                    {plant.watering_frequency_days}j
-                  </span>
-                </div>
-                
-                <div className="bg-gray-50 rounded-2xl p-4 mb-4">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Dernier arrosage</p>
-                  <p className="font-bold">
-                    {plant.last_watered_at ? new Date(plant.last_watered_at).toLocaleDateString() : "Jamais"}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {plants.map((plant) => (
+            <Link 
+              key={plant.id} 
+              href={`/plants/${plant.id}`} 
+              className="group block rounded-[32px] bg-white p-6 shadow-sm border border-transparent hover:border-green-500 transition-all"
+            >
+              <div className="flex justify-between items-start mb-6">
+                <h3 className="text-2xl font-black group-hover:text-green-600 tracking-tight">{plant.name}</h3>
+                <span className="text-[10px] font-black bg-gray-100 px-2 py-1 rounded-lg uppercase tracking-tighter">
+                  Tous les {plant.watering_frequency_days}j
+                </span>
+              </div>
+              
+              <div className="space-y-3 mb-6">
+                {/* PROCHAIN ARROSAGE (Nouveau) */}
+                <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
+                  <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-1">Prochain arrosage</p>
+                  <p className="font-black text-green-800 text-lg">
+                    {getNextWateringDate(plant.last_watered_at, plant.watering_frequency_days)}
                   </p>
                 </div>
 
-                <button 
-                  onClick={(e) => handleWaterPlant(e, plant.id)}
-                  className="w-full rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-green-600 transition"
-                >
-                  J'ai arrosé 💧
-                </button>
-              </Link>
-            ))}
-          </div>
-        )}
+                {/* DERNIER ARROSAGE */}
+                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dernier arrosage</p>
+                  <p className="font-bold text-gray-700">
+                    {plant.last_watered_at ? new Date(plant.last_watered_at).toLocaleDateString('fr-FR') : "Jamais"}
+                  </p>
+                </div>
+              </div>
+
+              <button 
+                onClick={(e) => handleWaterPlant(e, plant.id)}
+                className="w-full rounded-2xl bg-black py-4 text-sm font-bold text-white hover:bg-green-600 transition shadow-md active:scale-95"
+              >
+                J'AI ARROSÉ 💧
+              </button>
+            </Link>
+          ))}
+        </div>
       </main>
     </div>
   );
