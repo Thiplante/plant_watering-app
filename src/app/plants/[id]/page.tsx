@@ -3,17 +3,20 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
 export default function PlantDetailPage({ params }: { params: any }) {
   const resolvedParams = React.use(params) as any;
   const plantId = resolvedParams.id;
+  const router = useRouter();
 
   const [plant, setPlant] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newName, setNewName] = useState("");
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -31,6 +34,12 @@ export default function PlantDetailPage({ params }: { params: any }) {
     setLoading(false);
   };
 
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
+  };
+
   const handleUpdateName = async () => {
     await supabase.from("plants").update({ name: newName }).eq("id", plantId);
     setIsEditing(false);
@@ -40,58 +49,68 @@ export default function PlantDetailPage({ params }: { params: any }) {
   const handleWaterPlant = async () => {
     const now = new Date().toISOString();
     const { data: auth } = await supabase.auth.getUser();
-    if (auth.user) {
-      await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
-      await supabase.from("watering_logs").insert({ plant_id: plantId, watered_at: now, user_id: auth.user.id });
-      loadData();
+    
+    if (!auth.user) {
+      alert("Tu dois être connecté pour arroser !");
+      router.push("/login");
+      return;
     }
+
+    await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
+    await supabase.from("watering_logs").insert({ 
+      plant_id: plantId, 
+      watered_at: now, 
+      user_id: auth.user.id 
+    });
+    loadData();
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Supprimer cette plante définitivement ?")) return;
+    const { error } = await supabase.from("plants").delete().eq("id", plantId);
+    if (error) alert("Erreur : " + error.message);
+    else router.push("/");
   };
 
   if (loading) return <div className="p-20 text-center font-bold">Chargement...</div>;
-  if (!plant) return <div className="p-20 text-center text-red-500">Plante introuvable.</div>;
+  if (!plant) return <div className="p-20 text-center">Plante introuvable.</div>;
 
   return (
     <main className="min-h-screen bg-white p-6 sm:p-12 text-black">
       <div className="mx-auto max-w-2xl">
         <div className="flex justify-between items-center mb-10">
           <Link href="/" className="text-sm font-bold text-gray-400 hover:text-black transition">← RETOUR</Link>
-          <button onClick={handleWaterPlant} className="bg-black text-white px-8 py-3 rounded-full font-bold text-sm shadow-xl active:scale-95 transition">
-            J'AI ARROSÉ 💧
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={handleCopyLink}
+              className="bg-gray-100 text-gray-600 px-4 py-3 rounded-full font-bold text-xs hover:bg-gray-200 transition"
+            >
+              {copySuccess ? "Copié ! ✅" : "Partager 🔗"}
+            </button>
+            <button onClick={handleWaterPlant} className="bg-black text-white px-8 py-3 rounded-full font-bold text-sm shadow-xl active:scale-95 transition">
+              ARROSÉ 💧
+            </button>
+          </div>
         </div>
 
-        {/* NOM DE LA PLANTE + ICONE CLÉ */}
         <div className="mb-12">
           {isEditing ? (
             <div className="flex gap-2">
-              <input 
-                value={newName} 
-                onChange={(e) => setNewName(e.target.value)}
-                className="text-3xl font-black border-b-2 border-black outline-none w-full"
-                autoFocus
-              />
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} className="text-3xl font-black border-b-2 border-black outline-none w-full" autoFocus />
               <button onClick={handleUpdateName} className="bg-green-500 text-white px-4 rounded-xl font-bold">OK</button>
             </div>
           ) : (
             <div className="flex items-center gap-4">
               <h1 className="text-5xl font-black tracking-tighter">{plant.name}</h1>
-              <button 
-                onClick={() => setIsEditing(true)} 
-                className="text-gray-300 hover:text-blue-500 transition text-2xl"
-                title="Modifier le nom"
-              >
-                🔧
-              </button>
+              <button onClick={() => setIsEditing(true)} className="text-gray-300 hover:text-blue-500 transition text-2xl">🔧</button>
             </div>
           )}
-          <p className="text-gray-400 mt-2 font-medium italic">Clique sur la clé pour renommer ta plante</p>
         </div>
 
-        {/* GRILLE INFOS */}
         <div className="grid grid-cols-2 gap-4 mb-12">
           <div className="bg-gray-50 p-6 rounded-[24px]">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fréquence</p>
-            <p className="font-bold text-xl">{plant.watering_frequency_days} jours</p>
+            <p className="font-bold text-xl">{plant.watering_frequency_days}j</p>
           </div>
           <div className="bg-gray-50 p-6 rounded-[24px]">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dernier</p>
@@ -99,9 +118,8 @@ export default function PlantDetailPage({ params }: { params: any }) {
           </div>
         </div>
 
-        {/* HISTORIQUE */}
-        <div>
-          <h2 className="text-xl font-black mb-6">Historique des soins</h2>
+        <div className="mb-20">
+          <h2 className="text-xl font-black mb-6">Historique</h2>
           <div className="space-y-3">
             {history.length > 0 ? (
               history.map((log) => (
@@ -113,9 +131,15 @@ export default function PlantDetailPage({ params }: { params: any }) {
                 </div>
               ))
             ) : (
-              <p className="text-gray-400 italic text-center py-10">Pas encore d'historique.</p>
+              <p className="text-gray-400 italic text-center py-10">Aucun historique.</p>
             )}
           </div>
+        </div>
+
+        <div className="border-t border-gray-100 pt-10 text-center">
+          <button onClick={handleDelete} className="text-red-300 text-xs font-bold uppercase tracking-widest hover:text-red-600 transition">
+            🗑️ Supprimer la plante
+          </button>
         </div>
       </div>
     </main>
