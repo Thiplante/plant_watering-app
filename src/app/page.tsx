@@ -21,8 +21,7 @@ export default function HomePage() {
       }
 
       setUser(session.user);
-      // On charge les plantes immédiatement après avoir récupéré la session
-      await fetchPlants(session.user.id, session.user.email!);
+      await fetchPlants();
     };
 
     init();
@@ -31,24 +30,22 @@ export default function HomePage() {
       if (event === "SIGNED_OUT") router.push("/login");
       if (session) {
         setUser(session.user);
-        fetchPlants(session.user.id, session.user.email!);
+        fetchPlants();
       }
     });
 
     return () => authListener.subscription.unsubscribe();
   }, [router]);
 
-  const fetchPlants = async (userId: string, userEmail: string) => {
+  const fetchPlants = async () => {
     try {
       setLoading(true);
-      const emailLower = userEmail.toLowerCase().trim();
-
-      // Requête optimisée : on récupère les plantes dont je suis proprio OU invité
-      // Note: l'ordre des conditions est important pour la performance
+      
+      // REQUÊTE SIMPLIFIÉE : La sécurité (RLS) de Supabase 
+      // filtre automatiquement ce qu'on a le droit de voir.
       const { data, error } = await supabase
         .from("plants")
         .select("*")
-        .or(`owner_id.eq.${userId},id.in.(select plant_id from plant_shares where user_email.eq.${emailLower})`)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -92,7 +89,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#F0FDF4] text-black selection:bg-green-200">
-      {/* Navbar ultra propre */}
       <nav className="sticky top-0 z-50 flex items-center justify-between bg-white/90 backdrop-blur-lg px-8 py-5 shadow-sm border-b border-green-100">
         <div className="flex items-center gap-3">
           <span className="text-3xl">🌱</span>
@@ -110,7 +106,6 @@ export default function HomePage() {
       </nav>
 
       <main className="mx-auto max-w-7xl p-6 lg:p-12">
-        {/* Header Section */}
         <div className="mb-12 flex flex-col md:flex-row items-center justify-between gap-8 rounded-[48px] bg-white p-12 shadow-2xl shadow-green-900/5 border border-green-50">
           <div className="text-center md:text-left">
             <h1 className="text-6xl font-black text-gray-900 mb-4 tracking-tighter italic">Ma Jungle 🌿</h1>
@@ -124,12 +119,11 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Grid de plantes */}
         {plants.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-[48px] bg-white p-24 text-center border-4 border-dashed border-green-100 shadow-inner">
             <div className="text-8xl mb-8 grayscale opacity-50">🌵</div>
             <h2 className="text-2xl font-black text-gray-400 italic mb-4">C'est le désert ici...</h2>
-            <p className="text-gray-400 mb-8 max-w-md">Si tu as des plantes sur Supabase mais qu'elles ne s'affichent pas, vérifie que tu as bien lancé le code SQL de réparation.</p>
+            <p className="text-gray-400 mb-8 max-w-md">Si tu as des plantes sur Supabase, elles devraient apparaître maintenant.</p>
             <Link href="/plants/new" className="text-green-600 font-black border-b-4 border-green-600 pb-1 text-lg hover:text-green-800 hover:border-green-800 transition-all">Créer ma première plante</Link>
           </div>
         ) : (

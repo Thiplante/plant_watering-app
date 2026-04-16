@@ -62,20 +62,27 @@ export default function PlantDetailPage({ params }: { params: any }) {
   const handleWaterPlant = async () => {
     const now = new Date().toISOString();
     const { data: { session } } = await supabase.auth.getSession();
+    
     if (session) {
+      // 1. Mise à jour de la date sur la plante
       await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
+      
+      // 2. Insertion dans l'historique
       await supabase.from("watering_logs").insert({ 
         plant_id: plantId, 
         watered_at: now, 
         user_id: session.user.id 
       });
+      
       loadData();
     }
   };
 
   const handleShare = async (e: React.FormEvent) => {
     e.preventDefault();
+    // CORRECTION : On force les minuscules pour éviter les erreurs de correspondance
     const emailToShare = shareEmail.toLowerCase().trim();
+    
     const { error } = await supabase
       .from("plant_shares")
       .insert({ plant_id: plantId, user_email: emailToShare });
@@ -127,7 +134,6 @@ export default function PlantDetailPage({ params }: { params: any }) {
           )}
         </div>
 
-        {/* SECTION PARTAGE PAR EMAIL */}
         <div className="mb-12 p-8 bg-blue-50 rounded-[40px] border border-blue-100 shadow-sm shadow-blue-50">
           <h3 className="text-[10px] font-black text-blue-800 mb-4 uppercase tracking-[0.2em]">Partager avec un proche</h3>
           <form onSubmit={handleShare} className="flex gap-2">
