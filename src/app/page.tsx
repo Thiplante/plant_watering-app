@@ -63,11 +63,32 @@ export default function HomePage() {
     fetchPlants();
   };
 
+  const getDates = (plant: any) => {
+    if (!plant.last_watered_at) {
+      return {
+        last: "Jamais",
+        next: "À définir",
+        isOverdue: false,
+      };
+    }
+
+    const last = new Date(plant.last_watered_at);
+    const next = new Date(plant.last_watered_at);
+    next.setDate(next.getDate() + plant.watering_frequency_days);
+
+    const isOverdue = next < new Date();
+
+    return {
+      last: last.toLocaleDateString("fr-FR"),
+      next: next.toLocaleDateString("fr-FR"),
+      isOverdue,
+    };
+  };
+
   const getStatus = (plant: any) => {
     if (!plant.last_watered_at) return "unknown";
 
-    const last = new Date(plant.last_watered_at);
-    const next = new Date(last);
+    const next = new Date(plant.last_watered_at);
     next.setDate(next.getDate() + plant.watering_frequency_days);
 
     const now = new Date();
@@ -109,34 +130,48 @@ export default function HomePage() {
         </div>
       ) : (
         <div className="grid-elegant grid-elegant-3">
-          {plants.map((plant: any) => (
-            <Link key={plant.id} href={`/plants/${plant.id}`}>
-              <div className="plant-card">
+          {plants.map((plant: any) => {
+            const dates = getDates(plant);
 
-                <h3 className="plant-title">{plant.name}</h3>
+            return (
+              <Link key={plant.id} href={`/plants/${plant.id}`}>
+                <div className="plant-card">
 
-                <div className="pill-row mb-4">
-                  <span className="pill">📍 {plant.city}</span>
-                  <span className="pill">☀️ {plant.exposure}</span>
+                  <h3 className="plant-title">{plant.name}</h3>
+
+                  <div className="pill-row mb-4">
+                    <span className="pill">📍 {plant.city}</span>
+                    <span className="pill">☀️ {plant.exposure}</span>
+                  </div>
+
+                  {/* NOUVEAU BLOC */}
+                  <div className="space-y-2 mb-4">
+
+                    <div className="status-card">
+                      <span className="status-label">Dernier</span>
+                      <span className="status-value">{dates.last}</span>
+                    </div>
+
+                    <div className={`status-card ${danger ? "status-card-danger" : ""}`}>
+                      <span className="status-label">Prochain</span>
+                      <span className={danger ? "status-value status-value-danger" : "status-value"}>
+                        {dates.isOverdue ? "RETARD" : dates.next}
+                      </span>
+                    </div>
+
+                  </div>
+
+                  <button
+                    onClick={(e) => handleWater(e, plant)}
+                    className="btn-primary w-full"
+                  >
+                    💧 Arroser
+                  </button>
+
                 </div>
-
-                <div className={`status-card ${danger ? "status-card-danger" : ""}`}>
-                  <span className="status-label">Prochain</span>
-                  <span className={danger ? "status-value status-value-danger" : "status-value"}>
-                    {new Date(plant.last_watered_at).toLocaleDateString()}
-                  </span>
-                </div>
-
-                <button
-                  onClick={(e) => handleWater(e, plant)}
-                  className="btn-primary w-full mt-4"
-                >
-                  💧 Arroser
-                </button>
-
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </section>
