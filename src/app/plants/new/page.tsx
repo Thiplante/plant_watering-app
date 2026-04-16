@@ -3,112 +3,90 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function NewPlantPage() {
   const [name, setName] = useState("");
   const [frequency, setFrequency] = useState(3);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        window.location.replace("/login");
+        router.replace("/login");
         return;
       }
-
       setLoading(false);
     };
-
     checkUser();
-  }, []);
+  }, [router]);
 
   const handleCreate = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    if (!name.trim()) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      window.location.replace("/login");
+      router.replace("/login");
       return;
     }
 
     const { error } = await supabase.from("plants").insert({
       owner_id: user.id,
-      name,
+      name: name.trim(),
       watering_frequency_days: frequency,
+      last_watered_at: new Date().toISOString(), // Initialise la date à la création
     });
 
     if (error) {
-      alert(error.message);
+      alert("Erreur lors de la création : " + error.message);
     } else {
-      alert("Plante créée !");
-      window.location.href = "/";
+      router.push("/");
+      router.refresh();
     }
   };
 
   if (loading) return null;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <Link
-            href="/"
-            className="text-sm font-medium text-green-700 hover:text-green-800"
-          >
-            ← Retour à mes plantes
-          </Link>
-        </div>
-
-        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-8">
-          <div className="mb-6">
-            <p className="text-sm font-medium text-green-700">
-              Nouvelle plante
-            </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
-              Ajouter une plante 🌿
-            </h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Renseigne son nom et la fréquence d’arrosage.
-            </p>
-          </div>
-
-          <div className="space-y-5">
+    <main className="min-h-screen bg-gradient-to-b from-green-50 to-white p-6 sm:p-12">
+      <div className="mx-auto max-w-xl">
+        <Link href="/" className="text-sm font-bold text-green-700 hover:underline">
+          ← Retour à ma jungle
+        </Link>
+        <div className="mt-8 rounded-[40px] bg-white p-8 shadow-xl border border-green-100">
+          <h1 className="text-3xl font-black text-gray-900 mb-6">Nouvelle Plante 🌿</h1>
+          
+          <div className="space-y-6">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Nom de la plante
-              </label>
+              <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Nom de la plante</label>
               <input
                 type="text"
-                placeholder="Ex. Mon pothos"
+                placeholder="Mon beau Monstera..."
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 focus:bg-white"
+                className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4 outline-none focus:ring-2 focus:ring-green-500 transition"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Fréquence d’arrosage (jours)
-              </label>
+              <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Fréquence d'arrosage (jours)</label>
               <input
                 type="number"
                 min={1}
                 value={frequency}
                 onChange={(e) => setFrequency(Number(e.target.value))}
-                className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 focus:bg-white"
+                className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4 outline-none focus:ring-2 focus:ring-green-500 transition"
               />
             </div>
 
             <button
               onClick={handleCreate}
-              className="w-full rounded-2xl bg-green-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-700"
+              className="w-full rounded-2xl bg-green-600 py-4 text-sm font-black text-white shadow-lg shadow-green-600/20 hover:bg-green-700 transition active:scale-95"
             >
-              Créer la plante
+              CRÉER DANS MA JUNGLE
             </button>
           </div>
         </div>
