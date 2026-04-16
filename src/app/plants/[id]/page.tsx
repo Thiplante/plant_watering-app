@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 
 export default function PlantDetailPage() {
@@ -12,276 +11,140 @@ export default function PlantDetailPage() {
 
   const [plant, setPlant] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [shareEmail, setShareEmail] = useState("");
   const [loading, setLoading] = useState(true);
 
+  const [form, setForm] = useState<any>({
+    name: "",
+    city: "",
+    exposure: "",
+    frequency: 3,
+    rain: false,
+  });
+
   useEffect(() => {
-    if (plantId) {
-      loadData();
-    }
+    loadData();
   }, [plantId]);
 
   const loadData = async () => {
-    setLoading(true);
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push("/login");
-      return;
-    }
-
-    const { data: pData, error: plantError } = await supabase
+    const { data: plant } = await supabase
       .from("plants")
       .select("*")
       .eq("id", plantId)
-      .eq("owner_id", session.user.id)
       .single();
 
-    if (plantError || !pData) {
-      router.push("/");
-      return;
-    }
-
-    setPlant(pData);
-    setNewName(pData.name ?? "");
-
-    const { data: hData } = await supabase
+    const { data: history } = await supabase
       .from("watering_logs")
       .select("*")
       .eq("plant_id", plantId)
       .order("watered_at", { ascending: false });
 
-    setHistory(hData || []);
+    setPlant(plant);
+    setHistory(history || []);
+
+    setForm({
+      name: plant.name,
+      city: plant.city,
+      exposure: plant.exposure,
+      frequency: plant.watering_frequency_days,
+      rain: plant.can_be_watered_by_rain,
+    });
+
     setLoading(false);
   };
 
-  const handleUpdate = async () => {
-    if (!newName.trim()) {
-      alert("Le nom ne peut pas être vide.");
-      return;
-    }
+  const updatePlant = async () => {
+    await supabase.from("plants").update({
+      name: form.name,
+      city: form.city,
+      exposure: form.exposure,
+      watering_frequency_days: form.frequency,
+      can_be_watered_by_rain: form.rain,
+    }).eq("id", plantId);
 
-    const { error } = await supabase
-      .from("plants")
-      .update({ name: newName.trim() })
-      .eq("id", plantId);
-
-    if (error) {
-      alert("Erreur lors de la mise à jour.");
-      return;
-    }
-
-    setIsEditing(false);
+    alert("Mis à jour !");
     loadData();
   };
 
-  const handleWater = async () => {
-    const now = new Date().toISOString();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push("/login");
-      return;
-    }
-
-    const { error: updateError } = await supabase
-      .from("plants")
-      .update({ last_watered_at: now })
-      .eq("id", plantId);
-
-    if (updateError) {
-      alert("Erreur pendant l’arrosage.");
-      return;
-    }
-
-    const { error: logError } = await supabase.from("watering_logs").insert({
-      plant_id: plantId,
-      watered_at: now,
-      user_id: session.user.id,
-    });
-
-    if (logError) {
-      alert("Erreur lors de l’enregistrement dans l’historique.");
-      return;
-    }
-
-    loadData();
-  };
-
-  const handleDelete = async () => {
-    if (!confirm("Supprimer cette plante ?")) return;
-
-    const { error } = await supabase.from("plants").delete().eq("id", plantId);
-
-    if (error) {
-      alert("Erreur lors de la suppression.");
-      return;
-    }
-
+  const deletePlant = async () => {
+    if (!confirm("Supprimer ?")) return;
+    await supabase.from("plants").delete().eq("id", plantId);
     router.push("/");
   };
 
-  const handleShare = async () => {
-    if (!shareEmail.trim()) {
-      alert("Entre un email.");
-      return;
-    }
+  const deleteLog = async (id: string) => {
+    await supabase.from("watering_logs").delete().eq("id", id);
+    loadData();
+  };
 
-    const { error } = await supabase.from("plant_shares").insert({
+  const addWater = async () => {
+    const now = new Date().toISOString();
+
+    await supabase.from("plants").update({
+      last_watered_at: now,
+    }).eq("id", plantId);
+
+    await supabase.from("watering_logs").insert({
       plant_id: plantId,
-      user_email: shareEmail.trim().toLowerCase(),
+      watered_at: now,
     });
 
-    if (error) {
-      alert("Erreur partage : " + error.message);
-      return;
-    }
-
-    alert("Partagé !");
-    setShareEmail("");
+    loadData();
   };
 
-  const formatFullDate = (date?: string | null) => {
-    if (!date) return "Jamais";
-    return new Date(date).toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  if (loading) {
-    return (
-      <div className="p-20 text-center font-black">CHARGEMENT...</div>
-    );
-  }
-
-  if (!plant) {
-    return (
-      <div className="p-20 text-center font-black">PLANTE INTROUVABLE</div>
-    );
-  }
+  if (loading) return <div>CHARGEMENT...</div>;
 
   return (
-    <main className="min-h-screen bg-white p-6 text-black md:p-12">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-10 flex items-center justify-between">
-          <Link href="/" className="font-black text-gray-400">
-            ← RETOUR
-          </Link>
+    <div className="p-10 max-w-xl mx-auto space-y-6">
 
-          <button
-            onClick={handleWater}
-            className="rounded-full bg-black px-8 py-3 text-xs font-black uppercase text-white shadow-xl"
-          >
-            Arroser 💧
-          </button>
-        </div>
+      <button onClick={() => router.push("/")}>← Retour</button>
 
-        <div className="mb-12">
-          {isEditing ? (
-            <div className="flex gap-2">
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                className="w-full border-b-4 border-green-500 text-4xl font-black italic outline-none"
-              />
-              <button
-                onClick={handleUpdate}
-                className="rounded-xl bg-green-500 px-4 font-black text-white"
-              >
-                OK
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <h1 className="text-5xl font-black italic tracking-tighter">
-                {plant.name}
-              </h1>
-              <button
-                onClick={() => setIsEditing(true)}
-                className="text-2xl hover:scale-110"
-              >
-                🔧
-              </button>
-            </div>
-          )}
+      <button onClick={addWater}>💧 Arroser</button>
 
-          <p className="mt-2 text-[10px] uppercase tracking-widest text-gray-400">
-            Dernier : {formatFullDate(plant.last_watered_at)}
-          </p>
-        </div>
+      <div className="space-y-4">
 
-        <div className="mb-8 rounded-[32px] bg-blue-50 p-6">
-          <h3 className="mb-3 text-[10px] font-black uppercase">
-            Partager avec un ami (Email)
-          </h3>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom" />
+        
+        <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="Ville" />
 
-          <div className="flex gap-2">
-            <input
-              type="email"
-              placeholder="ami@mail.com"
-              value={shareEmail}
-              onChange={(e) => setShareEmail(e.target.value)}
-              className="flex-1 rounded-xl border-none px-4 py-2 text-sm shadow-inner"
-            />
-            <button
-              onClick={handleShare}
-              className="rounded-xl bg-blue-600 px-6 py-2 text-[10px] font-black uppercase tracking-widest text-white"
-            >
-              Partager
-            </button>
-          </div>
-        </div>
+        <select value={form.exposure} onChange={(e) => setForm({ ...form, exposure: e.target.value })}>
+          <option value="soleil">Soleil</option>
+          <option value="mi-ombre">Mi-ombre</option>
+          <option value="ombre">Ombre</option>
+        </select>
 
-        <div className="mb-12">
-          <h2 className="mb-6 text-xl font-black italic underline decoration-green-500">
-            Historique
-          </h2>
+        <input
+          type="number"
+          value={form.frequency}
+          onChange={(e) => setForm({ ...form, frequency: Number(e.target.value) })}
+        />
 
-          <div className="space-y-2">
-            {history.length === 0 ? (
-              <div className="rounded-2xl bg-gray-50 p-4 text-[11px] font-bold text-gray-400">
-                Aucun arrosage enregistré.
-              </div>
-            ) : (
-              history.slice(0, 5).map((log) => (
-                <div
-                  key={log.id}
-                  className="flex justify-between rounded-2xl bg-gray-50 p-4 text-[11px] font-bold"
-                >
-                  <span>💧 ARROSAGE</span>
-                  <span className="text-gray-400">
-                    {new Date(log.watered_at).toLocaleDateString("fr-FR")} à{" "}
-                    {new Date(log.watered_at).toLocaleTimeString("fr-FR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={form.rain}
+            onChange={(e) => setForm({ ...form, rain: e.target.checked })}
+          />
+          Pluie
+        </label>
 
-        <div className="flex justify-center border-t pt-10">
-          <button
-            onClick={handleDelete}
-            className="text-[10px] font-black uppercase tracking-[0.3em] text-red-300 hover:text-red-600"
-          >
-            Supprimer la plante
-          </button>
-        </div>
+        <button onClick={updatePlant}>💾 Sauvegarder</button>
       </div>
-    </main>
+
+      <div>
+        <h3>Historique</h3>
+
+        {history.map((log) => (
+          <div key={log.id} className="flex justify-between border p-2">
+            <span>{new Date(log.watered_at).toLocaleString()}</span>
+            <button onClick={() => deleteLog(log.id)}>❌</button>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={deletePlant} className="text-red-500">
+        Supprimer la plante
+      </button>
+
+    </div>
   );
 }
