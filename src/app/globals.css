@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* custom UI */
+body {
+  background: #f6fbf7;
+  color: #0f172a;
+}
+
+.dark body {
+  background: #0b1a13;
+  color: #e5f4ec;
+}
+
+.input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 16px;
+  background: #f4f4f4;
+  font-weight: bold;
+  outline: none;
+}
