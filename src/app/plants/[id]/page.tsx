@@ -3,6 +3,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useParams } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { getRainToday } from "@/lib/weather";
 
 export default function PlantDetailPage() {
   const params = useParams();
@@ -33,6 +42,7 @@ export default function PlantDetailPage() {
 
     setPlant(plant);
     setHistory(logs || []);
+
     setForm({
       name: plant.name,
       city: plant.city,
@@ -57,7 +67,7 @@ export default function PlantDetailPage() {
   };
 
   const deletePlant = async () => {
-    if (!confirm("Supprimer ?")) return;
+    if (!confirm("Supprimer la plante ?")) return;
     await supabase.from("plants").delete().eq("id", plantId);
     router.push("/");
   };
@@ -68,6 +78,12 @@ export default function PlantDetailPage() {
   };
 
   const addWater = async () => {
+    const rain = await getRainToday(plant.city);
+
+    if (rain && plant.can_be_watered_by_rain) {
+      alert("🌧️ Arrosée automatiquement par la pluie !");
+    }
+
     const now = new Date().toISOString();
 
     await supabase.from("plants").update({
@@ -82,19 +98,36 @@ export default function PlantDetailPage() {
     loadData();
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">🌿 Chargement...</div>;
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center font-black">
+        🌿 Chargement...
+      </div>
+    );
+
+  const chartData = history.map((log) => ({
+    date: new Date(log.watered_at).toLocaleDateString(),
+    value: 1,
+  }));
 
   return (
-    <div className="min-h-screen bg-[#F6FBF7] p-6 md:p-12">
+    <div className="min-h-screen bg-[#F6FBF7] dark:bg-[#0b1a13] p-6 md:p-12">
       <div className="max-w-3xl mx-auto space-y-10">
 
-        <button onClick={() => router.push("/")} className="text-gray-400 font-bold">
+        {/* RETOUR */}
+        <button
+          onClick={() => router.push("/")}
+          className="text-gray-400 font-bold hover:text-green-600"
+        >
           ← Retour
         </button>
 
-        <div className="bg-white p-8 rounded-[40px] shadow-lg space-y-6">
-
-          <h1 className="text-4xl font-black text-green-900">
+        {/* CARD PRINCIPALE */}
+        <motion.div
+          whileHover={{ scale: 1.01 }}
+          className="bg-white dark:bg-[#13241b] p-8 rounded-[40px] shadow-xl space-y-6"
+        >
+          <h1 className="text-4xl font-black text-green-900 dark:text-green-300">
             {plant.name}
           </h1>
 
@@ -105,25 +138,32 @@ export default function PlantDetailPage() {
             💧 Arroser
           </button>
 
+          {/* FORM */}
           <div className="grid md:grid-cols-2 gap-4">
 
             <input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, name: e.target.value })
+              }
               className="input"
               placeholder="Nom"
             />
 
             <input
               value={form.city}
-              onChange={(e) => setForm({ ...form, city: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, city: e.target.value })
+              }
               className="input"
               placeholder="Ville"
             />
 
             <select
               value={form.exposure}
-              onChange={(e) => setForm({ ...form, exposure: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, exposure: e.target.value })
+              }
               className="input"
             >
               <option value="soleil">☀️ Soleil</option>
@@ -134,42 +174,50 @@ export default function PlantDetailPage() {
             <input
               type="number"
               value={form.frequency}
-              onChange={(e) => setForm({ ...form, frequency: Number(e.target.value) })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  frequency: Number(e.target.value),
+                })
+              }
               className="input"
             />
 
           </div>
 
-          <label className="flex items-center gap-3">
+          <label className="flex items-center gap-3 font-bold">
             <input
               type="checkbox"
               checked={form.rain}
-              onChange={(e) => setForm({ ...form, rain: e.target.checked })}
+              onChange={(e) =>
+                setForm({ ...form, rain: e.target.checked })
+              }
             />
             🌧️ Arrosage par pluie
           </label>
 
           <button
             onClick={updatePlant}
-            className="bg-green-600 text-white px-6 py-3 rounded-xl font-bold"
+            className="bg-green-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-green-700"
           >
-            Sauvegarder
+            💾 Sauvegarder
           </button>
+        </motion.div>
 
-        </div>
-
-        <div className="bg-white p-8 rounded-[40px] shadow-lg">
-
+        {/* HISTORIQUE */}
+        <div className="bg-white dark:bg-[#13241b] p-8 rounded-[40px] shadow-xl">
           <h2 className="text-xl font-black mb-6">Historique</h2>
 
           <div className="space-y-3">
             {history.map((log) => (
-              <div
+              <motion.div
                 key={log.id}
-                className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl"
+                whileHover={{ scale: 1.02 }}
+                className="flex justify-between items-center bg-gray-50 dark:bg-[#1d3328] p-4 rounded-2xl"
               >
                 <span>
-                  💧 {new Date(log.watered_at).toLocaleString()}
+                  💧{" "}
+                  {new Date(log.watered_at).toLocaleString()}
                 </span>
 
                 <button
@@ -178,11 +226,29 @@ export default function PlantDetailPage() {
                 >
                   ✕
                 </button>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
 
+        {/* STATS */}
+        <div className="bg-white dark:bg-[#13241b] p-8 rounded-[40px] shadow-xl">
+          <h2 className="font-black mb-4">Stats</h2>
+
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={chartData}>
+              <XAxis dataKey="date" />
+              <Tooltip />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#16a34a"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* DELETE */}
         <button
           onClick={deletePlant}
           className="text-red-400 hover:text-red-600 font-bold text-center w-full"
@@ -202,7 +268,6 @@ export default function PlantDetailPage() {
           outline: none;
         }
       `}</style>
-
     </div>
   );
 }
