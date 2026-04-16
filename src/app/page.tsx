@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -15,89 +16,210 @@ export default function HomePage() {
 
   const fetchPlants = async () => {
     setLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return router.push("/login");
 
-    // Récupérer mes plantes + les plantes partagées avec moi
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("plants")
       .select("*")
+      .eq("owner_id", session.user.id)
       .order("created_at", { ascending: false });
 
-    if (!error) setPlants(data || []);
+    if (error) {
+      alert("Erreur lors du chargement des plantes.");
+      setLoading(false);
+      return;
+    }
+
+    setPlants(data || []);
     setLoading(false);
   };
 
   const handleQuickWater = async (e: React.MouseEvent, plant: any) => {
-    e.preventDefault(); // Empêche d'ouvrir la page de détail
+    e.preventDefault();
+
     const now = new Date().toISOString();
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    await supabase.from("plants").update({ last_watered_at: now }).eq("id", plant.id);
-    await supabase.from("watering_logs").insert({ 
-      plant_id: plant.id, 
-      watered_at: now, 
-      user_id: session?.user.id 
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from("plants")
+      .update({ last_watered_at: now })
+      .eq("id", plant.id);
+
+    if (updateError) {
+      alert("Erreur pendant l’arrosage.");
+      return;
+    }
+
+    const { error: logError } = await supabase.from("watering_logs").insert({
+      plant_id: plant.id,
+      watered_at: now,
+      user_id: session.user.id,
     });
+
+    if (logError) {
+      alert("Erreur lors de l’enregistrement de l’historique.");
+      return;
+    }
+
     fetchPlants();
   };
 
-  const calculateStatus = (lastDate: string, frequency: number) => {
+  const calculateStatus = (lastDate?: string | null, frequency?: number) => {
+    if (!lastDate || !frequency) {
+      return {
+        last: "Jamais",
+        next: "À définir",
+        isOverdue: false,
+      };
+    }
+
     const last = new Date(lastDate);
     const next = new Date(lastDate);
     next.setDate(next.getDate() + frequency);
+
     const isOverdue = next < new Date();
+
     return {
-      last: last.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-      next: isOverdue ? "RETARD" : next.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-      isOverdue
+      last: last.toLocaleDateString("fr-FR", {
+        day: "numeric",
+        month: "short",
+      }),
+      next: isOverdue
+        ? "RETARD"
+        : next.toLocaleDateString("fr-FR", {
+            day: "numeric",
+            month: "short",
+          }),
+      isOverdue,
     };
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#F0FDF4] font-black italic">CHARGEMENT...</div>;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F0FDF4] font-black italic">
+        CHARGEMENT...
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#F0FDF4] p-6 lg:p-12 text-black">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-12 bg-white p-10 rounded-[48px] shadow-sm">
-          <h1 className="text-5xl font-black italic tracking-tighter uppercase">Ma Jungle ☁️</h1>
-          <Link href="/plants/new" className="bg-green-600 text-white px-10 py-5 rounded-3xl font-black shadow-lg hover:scale-105 transition">+ AJOUTER</Link>
+    <div className="min-h-screen bg-[#F0FDF4] p-6 text-black lg:p-12">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-12 flex items-center justify-between rounded-[48px] bg-white p-10 shadow-sm">
+          <h1 className="text-5xl font-black uppercase italic tracking-tighter">
+            Ma Jungle ☁️
+          </h1>
+
+          <Link
+            href="/plants/new"
+            className="rounded-3xl bg-green-600 px-10 py-5 font-black text-white shadow-lg transition hover:scale-105"
+          >
+            + AJOUTER
+          </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {plants.map((plant) => {
-            const status = calculateStatus(plant.last_watered_at, plant.watering_frequency_days);
-            return (
-              <div key={plant.id} className="group relative bg-white rounded-[44px] p-8 border-2 border-transparent hover:border-green-400 shadow-sm transition-all">
-                <Link href={`/plants/${plant.id}`}>
-                  <h3 className="text-3xl font-black tracking-tighter mb-4">{plant.name}</h3>
-                  <div className="flex gap-2 mb-6 text-[10px] font-black uppercase text-gray-400">
-                    <span className="bg-gray-50 px-3 py-1 rounded-lg">📍 {plant.city}</span>
-                    <span className="bg-gray-50 px-3 py-1 rounded-lg">🔆 {plant.exposure}</span>
-                  </div>
+        {plants.length === 0 ? (
+          <div className="rounded-[32px] bg-white p-10 text-center shadow-sm">
+            <h2 className="mb-2 text-2xl font-black">Aucune plante pour le moment</h2>
+            <p className="mb-6 text-gray-500">
+              Commence par ajouter ta première plante.
+            </p>
+            <Link
+              href="/plants/new"
+              className="inline-block rounded-2xl bg-green-600 px-6 py-3 font-black text-white"
+            >
+              Ajouter une plante
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {plants.map((plant) => {
+              const status = calculateStatus(
+                plant.last_watered_at,
+                plant.watering_frequency_days
+              );
 
-                  <div className="space-y-3 mb-6">
-                    <div className="flex justify-between items-center px-4 py-3 bg-gray-50 rounded-2xl">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dernier</span>
-                      <span className="text-sm font-bold text-gray-700">{status.last}</span>
-                    </div>
-                    <div className={`flex justify-between items-center px-4 py-3 rounded-2xl border ${status.isOverdue ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
-                      <span className={`text-[10px] font-black uppercase ${status.isOverdue ? 'text-red-400' : 'text-green-400'}`}>Prochain</span>
-                      <span className={`text-sm font-black ${status.isOverdue ? 'text-red-600' : 'text-green-600'}`}>{status.next}</span>
-                    </div>
-                  </div>
-                </Link>
-
-                <button 
-                  onClick={(e) => handleQuickWater(e, plant)}
-                  className="w-full bg-black text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] active:scale-95 transition"
+              return (
+                <div
+                  key={plant.id}
+                  className="group relative rounded-[44px] border-2 border-transparent bg-white p-8 shadow-sm transition-all hover:border-green-400"
                 >
-                  ARROSER 💧
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                  <Link href={`/plants/${plant.id}`}>
+                    <h3 className="mb-4 text-3xl font-black tracking-tighter">
+                      {plant.name}
+                    </h3>
+
+                    <div className="mb-6 flex gap-2 text-[10px] font-black uppercase text-gray-400">
+                      <span className="rounded-lg bg-gray-50 px-3 py-1">
+                        📍 {plant.city || "Ville inconnue"}
+                      </span>
+                      <span className="rounded-lg bg-gray-50 px-3 py-1">
+                        🔆 {plant.exposure || "Non définie"}
+                      </span>
+                    </div>
+
+                    <div className="mb-6 space-y-3">
+                      <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                          Dernier
+                        </span>
+                        <span className="text-sm font-bold text-gray-700">
+                          {status.last}
+                        </span>
+                      </div>
+
+                      <div
+                        className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${
+                          status.isOverdue
+                            ? "border-red-100 bg-red-50"
+                            : "border-green-100 bg-green-50"
+                        }`}
+                      >
+                        <span
+                          className={`text-[10px] font-black uppercase ${
+                            status.isOverdue ? "text-red-400" : "text-green-400"
+                          }`}
+                        >
+                          Prochain
+                        </span>
+                        <span
+                          className={`text-sm font-black ${
+                            status.isOverdue ? "text-red-600" : "text-green-600"
+                          }`}
+                        >
+                          {status.next}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+
+                  <button
+                    onClick={(e) => handleQuickWater(e, plant)}
+                    className="w-full rounded-2xl bg-black py-4 text-xs font-black uppercase tracking-[0.2em] text-white transition active:scale-95"
+                  >
+                    ARROSER 💧
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
