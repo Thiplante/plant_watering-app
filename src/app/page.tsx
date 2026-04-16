@@ -123,7 +123,7 @@ export default function HomePage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-12 flex items-center justify-between rounded-[48px] bg-white p-10 shadow-sm">
           <h1 className="text-5xl font-black uppercase italic tracking-tighter">
-            Ma Jungle ☁️
+            Ma Jungle ☁️lk
           </h1>
 
           <Link
