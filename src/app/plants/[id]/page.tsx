@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -13,175 +12,98 @@ export default function PlantDetailPage({ params }: { params: any }) {
 
   const [plant, setPlant] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [newName, setNewName] = useState("");
+  const [shareEmail, setShareEmail] = useState("");
 
-  useEffect(() => {
-    loadData();
-  }, [plantId]);
+  useEffect(() => { loadData(); }, [plantId]);
 
   const loadData = async () => {
-    if (!plantId) return;
-    try {
-      const { data: pData, error: pError } = await supabase
-        .from("plants")
-        .select("*")
-        .eq("id", plantId)
-        .single();
-
-      if (pError) throw pError;
+    const { data: pData } = await supabase.from("plants").select("*").eq("id", plantId).single();
+    if (pData) {
       setPlant(pData);
       setNewName(pData.name);
-        
-      const { data: hData } = await supabase
-        .from("watering_logs")
-        .select("*")
-        .eq("plant_id", plantId)
-        .order("watered_at", { ascending: false });
-      
+      const { data: hData } = await supabase.from("watering_logs").select("*").eq("plant_id", plantId).order("watered_at", { ascending: false });
       setHistory(hData || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const handleUpdateName = async () => {
-    if (!newName.trim()) return;
-    const { error } = await supabase
-      .from("plants")
-      .update({ name: newName.trim() })
-      .eq("id", plantId);
-
-    if (error) {
-      alert("Erreur de modification : " + error.message);
-    } else {
-      setIsEditing(false);
-      loadData();
-    }
+  const handleUpdate = async () => {
+    await supabase.from("plants").update({ name: newName }).eq("id", plantId);
+    setIsEditing(false);
+    loadData();
   };
 
-  const handleWaterPlant = async () => {
+  const handleWater = async () => {
     const now = new Date().toISOString();
     const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
-      await supabase.from("watering_logs").insert({ 
-        plant_id: plantId, 
-        watered_at: now, 
-        user_id: session.user.id 
-      });
-      loadData();
-    }
+    await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
+    await supabase.from("watering_logs").insert({ plant_id: plantId, watered_at: now, user_id: session?.user.id });
+    loadData();
   };
 
   const handleDelete = async () => {
-    if (!confirm("Supprimer définitivement cette plante ?")) return;
-    const { error } = await supabase.from("plants").delete().eq("id", plantId);
-    if (error) {
-      alert("Erreur de suppression : " + error.message);
-    } else {
+    if (confirm("Supprimer ?")) {
+      await supabase.from("plants").delete().eq("id", plantId);
       router.push("/");
     }
   };
 
-  const getAIRecommendation = () => {
-    if (plant.exposure === "soleil") {
-      return { tip: "Exposition forte : L'évaporation est rapide. Surveillez la terre.", style: "bg-orange-50 text-orange-700 border-orange-100" };
-    }
-    if (plant.can_be_watered_by_rain) {
-      return { tip: "Mode Pluie : L'IA analyse les précipitations à " + plant.city + " pour ajuster le prochain arrosage.", style: "bg-blue-50 text-blue-700 border-blue-100" };
-    }
-    return { tip: "Conditions stables : Continuez le cycle de " + plant.watering_frequency_days + " jours.", style: "bg-green-50 text-green-700 border-green-100" };
+  const handleShare = async () => {
+    if (!shareEmail) return;
+    const { error } = await supabase.from("plant_shares").insert({ plant_id: plantId, user_email: shareEmail });
+    if (error) alert("Erreur partage");
+    else { alert("Partagé !"); setShareEmail(""); }
   };
 
-  if (loading) return <div className="p-20 text-center font-black animate-pulse text-green-800">ANALYSE EN COURS...</div>;
-  if (!plant) return <div className="p-20 text-center uppercase font-black">Plante perdue...</div>;
-
-  const ai = getAIRecommendation();
+  if (!plant) return <div className="p-20 text-center font-black">CHARGEMENT...</div>;
 
   return (
-    <main className="min-h-screen bg-white p-6 sm:p-12 text-black font-sans">
-      <div className="mx-auto max-w-2xl">
+    <main className="min-h-screen bg-white p-6 md:p-12 text-black">
+      <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-10">
-          <Link href="/" className="text-sm font-black text-gray-400 hover:text-black transition tracking-tighter">← RETOUR</Link>
-          <div className="flex gap-2">
-            <button 
-              onClick={handleWaterPlant} 
-              className="bg-black text-white px-6 py-3 rounded-full font-black text-xs shadow-xl active:scale-95 transition uppercase tracking-widest"
-            >
-              ARROSER 💧
-            </button>
-          </div>
+          <Link href="/" className="font-black text-gray-400">← RETOUR</Link>
+          <button onClick={handleWater} className="bg-black text-white px-8 py-3 rounded-full font-black text-xs uppercase shadow-xl">Arroser 💧</button>
         </div>
 
-        <div className="mb-8">
+        <div className="mb-12">
           {isEditing ? (
-            <div className="flex gap-3">
-              <input 
-                value={newName} 
-                onChange={(e) => setNewName(e.target.value)}
-                className="text-4xl font-black border-b-4 border-green-500 outline-none w-full italic"
-              />
-              <button onClick={handleUpdateName} className="bg-green-500 text-white px-6 rounded-2xl font-black text-xs">OK</button>
-              <button onClick={() => setIsEditing(false)} className="text-gray-400 font-black text-xs">ANNULER</button>
+            <div className="flex gap-2">
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} className="text-4xl font-black border-b-4 border-green-500 outline-none w-full italic" />
+              <button onClick={handleUpdate} className="bg-green-500 text-white px-4 rounded-xl font-black">OK</button>
             </div>
           ) : (
-            <div className="flex items-center gap-4 group">
-              <h1 className="text-5xl font-black tracking-tighter italic">{plant.name}</h1>
-              <button onClick={() => setIsEditing(true)} className="text-gray-200 group-hover:text-blue-500 transition text-2xl">🔧</button>
+            <div className="flex items-center gap-4">
+              <h1 className="text-5xl font-black italic tracking-tighter">{plant.name}</h1>
+              <button onClick={() => setIsEditing(true)} className="text-2xl hover:scale-110">🔧</button>
             </div>
           )}
-          <div className="flex gap-3 mt-2">
-            <span className="px-3 py-1 bg-gray-100 rounded-lg text-[10px] font-black uppercase tracking-widest text-gray-500">📍 {plant.city}</span>
-            <span className="px-3 py-1 bg-gray-100 rounded-lg text-[10px] font-black uppercase tracking-widest text-gray-500">🔆 {plant.exposure}</span>
-          </div>
-          {/* AJOUT : LIGNE DERNIER ARROSAGE */}
-          <p className="mt-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-            Dernier arrosage : {plant.last_watered_at ? new Date(plant.last_watered_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : "Aucun"}
-          </p>
+          <p className="text-[10px] font-black text-gray-400 mt-2 uppercase tracking-widest">Dernier : {new Date(plant.last_watered_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
         </div>
 
-        <div className={`mb-12 p-8 rounded-[32px] border-2 ${ai.style}`}>
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] mb-2">Analyse Smart Care</h3>
-          <p className="font-bold italic text-lg">{ai.tip}</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-12">
-          <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100 text-center">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Fréquence</p>
-            <p className="font-black text-2xl">{plant.watering_frequency_days}j</p>
-          </div>
-          <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100 text-center">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Pluie</p>
-            <p className="font-black text-2xl">{plant.can_be_watered_by_rain ? "OUI" : "NON"}</p>
+        {/* SECTION PARTAGE */}
+        <div className="bg-blue-50 p-6 rounded-[32px] mb-8">
+          <h3 className="text-[10px] font-black uppercase mb-3">Partager avec un ami (Email)</h3>
+          <div className="flex gap-2">
+            <input type="email" placeholder="ami@mail.com" value={shareEmail} onChange={(e) => setShareEmail(e.target.value)} className="flex-1 px-4 py-2 rounded-xl text-sm border-none shadow-inner" />
+            <button onClick={handleShare} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest">Partager</button>
           </div>
         </div>
 
         <div className="mb-12">
-          <h2 className="text-xl font-black mb-6 tracking-tighter uppercase underline decoration-green-500 underline-offset-8 italic">Historique</h2>
-          <div className="space-y-3">
-            {history.length === 0 ? <p className="text-gray-300 italic">Aucun log.</p> : history.slice(0, 10).map((log) => (
-              <div key={log.id} className="flex justify-between items-center p-5 bg-white border border-gray-100 rounded-[24px]">
-                <span className="font-black text-gray-800 text-sm italic">💧 Arrosage</span>
-                <span className="text-gray-400 text-[10px] font-bold">
-                  {/* MODIFICATION : AJOUT DE L'HEURE DANS L'HISTORIQUE */}
-                  {new Date(log.watered_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} à {new Date(log.watered_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
+          <h2 className="text-xl font-black mb-6 italic underline decoration-green-500">Historique</h2>
+          <div className="space-y-2">
+            {history.slice(0, 5).map(log => (
+              <div key={log.id} className="flex justify-between p-4 bg-gray-50 rounded-2xl text-[11px] font-bold">
+                <span>💧 ARROSAGE</span>
+                <span className="text-gray-400">{new Date(log.watered_at).toLocaleDateString()} à {new Date(log.watered_at).toLocaleTimeString()}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="pt-10 border-t border-gray-100 flex justify-center">
-          <button 
-            onClick={handleDelete}
-            className="text-red-200 hover:text-red-600 transition font-black text-[10px] uppercase tracking-[0.3em]"
-          >
-            🗑️ Supprimer la plante
-          </button>
+        <div className="flex justify-center border-t pt-10">
+          <button onClick={handleDelete} className="text-red-300 hover:text-red-600 font-black text-[10px] uppercase tracking-[0.3em]">Supprimer la plante</button>
         </div>
       </div>
     </main>
