@@ -11,15 +11,8 @@ export default function PlantDetailPage() {
 
   const [plant, setPlant] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
+  const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
-
-  const [form, setForm] = useState<any>({
-    name: "",
-    city: "",
-    exposure: "",
-    frequency: 3,
-    rain: false,
-  });
 
   useEffect(() => {
     loadData();
@@ -32,15 +25,14 @@ export default function PlantDetailPage() {
       .eq("id", plantId)
       .single();
 
-    const { data: history } = await supabase
+    const { data: logs } = await supabase
       .from("watering_logs")
       .select("*")
       .eq("plant_id", plantId)
       .order("watered_at", { ascending: false });
 
     setPlant(plant);
-    setHistory(history || []);
-
+    setHistory(logs || []);
     setForm({
       name: plant.name,
       city: plant.city,
@@ -61,7 +53,6 @@ export default function PlantDetailPage() {
       can_be_watered_by_rain: form.rain,
     }).eq("id", plantId);
 
-    alert("Mis à jour !");
     loadData();
   };
 
@@ -91,59 +82,126 @@ export default function PlantDetailPage() {
     loadData();
   };
 
-  if (loading) return <div>CHARGEMENT...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center">🌿 Chargement...</div>;
 
   return (
-    <div className="p-10 max-w-xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#F6FBF7] p-6 md:p-12">
+      <div className="max-w-3xl mx-auto space-y-10">
 
-      <button onClick={() => router.push("/")}>← Retour</button>
+        <button onClick={() => router.push("/")} className="text-gray-400 font-bold">
+          ← Retour
+        </button>
 
-      <button onClick={addWater}>💧 Arroser</button>
+        <div className="bg-white p-8 rounded-[40px] shadow-lg space-y-6">
 
-      <div className="space-y-4">
+          <h1 className="text-4xl font-black text-green-900">
+            {plant.name}
+          </h1>
 
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nom" />
-        
-        <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="Ville" />
+          <button
+            onClick={addWater}
+            className="bg-black text-white px-6 py-3 rounded-xl font-bold"
+          >
+            💧 Arroser
+          </button>
 
-        <select value={form.exposure} onChange={(e) => setForm({ ...form, exposure: e.target.value })}>
-          <option value="soleil">Soleil</option>
-          <option value="mi-ombre">Mi-ombre</option>
-          <option value="ombre">Ombre</option>
-        </select>
+          <div className="grid md:grid-cols-2 gap-4">
 
-        <input
-          type="number"
-          value={form.frequency}
-          onChange={(e) => setForm({ ...form, frequency: Number(e.target.value) })}
-        />
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="input"
+              placeholder="Nom"
+            />
 
-        <label>
-          <input
-            type="checkbox"
-            checked={form.rain}
-            onChange={(e) => setForm({ ...form, rain: e.target.checked })}
-          />
-          Pluie
-        </label>
+            <input
+              value={form.city}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+              className="input"
+              placeholder="Ville"
+            />
 
-        <button onClick={updatePlant}>💾 Sauvegarder</button>
-      </div>
+            <select
+              value={form.exposure}
+              onChange={(e) => setForm({ ...form, exposure: e.target.value })}
+              className="input"
+            >
+              <option value="soleil">☀️ Soleil</option>
+              <option value="mi-ombre">🌤️ Mi-ombre</option>
+              <option value="ombre">☁️ Ombre</option>
+            </select>
 
-      <div>
-        <h3>Historique</h3>
+            <input
+              type="number"
+              value={form.frequency}
+              onChange={(e) => setForm({ ...form, frequency: Number(e.target.value) })}
+              className="input"
+            />
 
-        {history.map((log) => (
-          <div key={log.id} className="flex justify-between border p-2">
-            <span>{new Date(log.watered_at).toLocaleString()}</span>
-            <button onClick={() => deleteLog(log.id)}>❌</button>
           </div>
-        ))}
+
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={form.rain}
+              onChange={(e) => setForm({ ...form, rain: e.target.checked })}
+            />
+            🌧️ Arrosage par pluie
+          </label>
+
+          <button
+            onClick={updatePlant}
+            className="bg-green-600 text-white px-6 py-3 rounded-xl font-bold"
+          >
+            Sauvegarder
+          </button>
+
+        </div>
+
+        <div className="bg-white p-8 rounded-[40px] shadow-lg">
+
+          <h2 className="text-xl font-black mb-6">Historique</h2>
+
+          <div className="space-y-3">
+            {history.map((log) => (
+              <div
+                key={log.id}
+                className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl"
+              >
+                <span>
+                  💧 {new Date(log.watered_at).toLocaleString()}
+                </span>
+
+                <button
+                  onClick={() => deleteLog(log.id)}
+                  className="text-red-400 hover:text-red-600"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={deletePlant}
+          className="text-red-400 hover:text-red-600 font-bold text-center w-full"
+        >
+          Supprimer la plante
+        </button>
+
       </div>
 
-      <button onClick={deletePlant} className="text-red-500">
-        Supprimer la plante
-      </button>
+      <style jsx>{`
+        .input {
+          width: 100%;
+          padding: 12px;
+          border-radius: 16px;
+          background: #f4f4f4;
+          font-weight: bold;
+          outline: none;
+        }
+      `}</style>
 
     </div>
   );
