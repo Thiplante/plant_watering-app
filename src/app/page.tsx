@@ -41,16 +41,27 @@ export default function HomePage() {
   };
 
   const calculateWateringStatus = (lastDate: string, frequency: number) => {
-    if (!lastDate) return { text: "À arroser !", color: "text-red-600", bg: "bg-red-50" };
+    const last = new Date(lastDate);
+    if (!lastDate) return { 
+      text: "À arroser !", 
+      color: "text-red-600", 
+      bg: "bg-red-50", 
+      lastText: "Jamais" 
+    };
+
     const nextDate = new Date(lastDate);
     nextDate.setDate(nextDate.getDate() + frequency);
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    
     const isOverdue = nextDate < today;
+
     return {
       text: isOverdue ? `En retard` : nextDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
       color: isOverdue ? "text-red-600" : "text-green-600",
       bg: isOverdue ? "bg-red-50" : "bg-green-50",
+      lastText: last.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
     };
   };
 
@@ -113,22 +124,13 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <div className={`rounded-3xl p-6 mb-4 ${status.bg} border border-current/10`}>
-                    <p className={`text-[10px] font-black uppercase mb-1 ${status.color}`}>Prochain soin</p>
-                    <p className={`text-3xl font-black ${status.color}`}>{status.text}</p>
+                  {/* Bloc DERNIER ARROSAGE */}
+                  <div className="bg-gray-50 border border-gray-100 rounded-3xl p-5 mb-3 flex justify-between items-center">
+                    <p className="text-[10px] font-black uppercase text-gray-400">Dernier soin</p>
+                    <p className="text-sm font-bold text-gray-600 italic">{status.lastText}</p>
                   </div>
 
-                  {plant.can_be_watered_by_rain && (
-                    <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-2xl">
-                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">🌧️ Autonome via pluie</span>
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+                  {/* Bloc PROCHAIN SOIN */}
+                  <div className={`rounded-3xl p-6 mb-4 ${status.bg} border border-current/10`}>
+                    <p className={`text-[10px] font-black uppercase mb-1 ${status.color}`}>Prochain soin</p>
+                    <p className={`text

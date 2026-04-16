@@ -138,6 +138,10 @@ export default function PlantDetailPage({ params }: { params: any }) {
             <span className="px-3 py-1 bg-gray-100 rounded-lg text-[10px] font-black uppercase tracking-widest text-gray-500">📍 {plant.city}</span>
             <span className="px-3 py-1 bg-gray-100 rounded-lg text-[10px] font-black uppercase tracking-widest text-gray-500">🔆 {plant.exposure}</span>
           </div>
+          {/* AJOUT : LIGNE DERNIER ARROSAGE */}
+          <p className="mt-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+            Dernier arrosage : {plant.last_watered_at ? new Date(plant.last_watered_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : "Aucun"}
+          </p>
         </div>
 
         <div className={`mb-12 p-8 rounded-[32px] border-2 ${ai.style}`}>
@@ -159,11 +163,12 @@ export default function PlantDetailPage({ params }: { params: any }) {
         <div className="mb-12">
           <h2 className="text-xl font-black mb-6 tracking-tighter uppercase underline decoration-green-500 underline-offset-8 italic">Historique</h2>
           <div className="space-y-3">
-            {history.length === 0 ? <p className="text-gray-300 italic">Aucun log.</p> : history.slice(0, 5).map((log) => (
+            {history.length === 0 ? <p className="text-gray-300 italic">Aucun log.</p> : history.slice(0, 10).map((log) => (
               <div key={log.id} className="flex justify-between items-center p-5 bg-white border border-gray-100 rounded-[24px]">
                 <span className="font-black text-gray-800 text-sm italic">💧 Arrosage</span>
                 <span className="text-gray-400 text-[10px] font-bold">
-                  {new Date(log.watered_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
+                  {/* MODIFICATION : AJOUT DE L'HEURE DANS L'HISTORIQUE */}
+                  {new Date(log.watered_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} à {new Date(log.watered_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             ))}
