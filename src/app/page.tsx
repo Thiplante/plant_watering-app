@@ -1,4 +1,3 @@
-// src/app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -87,19 +86,40 @@ export default function HomePage() {
       return {
         last: "Jamais",
         next: "À définir",
+        label: "À définir",
         isOverdue: false,
       };
     }
 
+    const now = new Date();
     const last = new Date(plant.last_watered_at);
+
     const next = new Date(plant.last_watered_at);
     next.setDate(next.getDate() + plant.watering_frequency_days);
 
-    const isOverdue = next < new Date();
+    const diffMs = next.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    let label = "";
+    let isOverdue = false;
+
+    if (diffDays < 0) {
+      isOverdue = true;
+      label = `En retard de ${Math.abs(diffDays)} jour${
+        Math.abs(diffDays) > 1 ? "s" : ""
+      }`;
+    } else if (diffDays === 0) {
+      label = "Aujourd’hui";
+    } else if (diffDays === 1) {
+      label = "Demain";
+    } else {
+      label = `Dans ${diffDays} jours`;
+    }
 
     return {
       last: last.toLocaleDateString("fr-FR"),
       next: next.toLocaleDateString("fr-FR"),
+      label,
       isOverdue,
     };
   };
@@ -129,15 +149,13 @@ export default function HomePage() {
     return (
       <main className="page-shell">
         <div className="page-container">
-          <div className="glass-card center-empty">
-            🌿 Chargement...
-          </div>
+          <div className="glass-card center-empty">🌿 Chargement...</div>
         </div>
       </main>
     );
   }
 
-  const Section = ({ title, plants, danger = false }: any) => (
+  const Section = ({ title, plants }: any) => (
     <section className="mb-10">
       <h2 className="section-title mb-6">
         {title} ({plants.length})
@@ -157,10 +175,10 @@ export default function HomePage() {
                     <img
                       src={plant.image_url}
                       alt={plant.name}
-                      className="w-full h-[220px] object-cover rounded-[24px] mb-5"
+                      className="mb-5 h-[220px] w-full rounded-[24px] object-cover"
                     />
                   ) : (
-                    <div className="soft-card h-[220px] rounded-[24px] mb-5 flex items-center justify-center subtle-text">
+                    <div className="soft-card mb-5 flex h-[220px] items-center justify-center rounded-[24px] subtle-text">
                       🌿 Pas encore de photo
                     </div>
                   )}
@@ -178,14 +196,20 @@ export default function HomePage() {
                       <span className="status-value">{dates.last}</span>
                     </div>
 
-                    <div className={`status-card ${danger ? "status-card-danger" : ""}`}>
+                    <div
+                      className={`status-card ${
+                        dates.isOverdue ? "status-card-danger" : ""
+                      }`}
+                    >
                       <span className="status-label">Prochain</span>
                       <span
                         className={
-                          danger ? "status-value status-value-danger" : "status-value"
+                          dates.isOverdue
+                            ? "status-value status-value-danger"
+                            : "status-value"
                         }
                       >
-                        {dates.isOverdue ? "RETARD" : dates.next}
+                        {dates.label}
                       </span>
                     </div>
                   </div>
@@ -208,14 +232,14 @@ export default function HomePage() {
   return (
     <main className="page-shell">
       <div className="page-container">
-        <div className="topbar-blur p-6 mb-10">
+        <div className="topbar-blur mb-10 p-6">
           <h1 className="hero-title">Dashboard 🌿</h1>
           <p className="subtle-text mt-2">
             Gère facilement l’arrosage de toutes tes plantes
           </p>
         </div>
 
-        <Section title="🚨 En retard" plants={overdue} danger />
+        <Section title="🚨 En retard" plants={overdue} />
         <Section title="⏰ À arroser aujourd’hui" plants={today} />
         <Section title="🌱 Tout va bien" plants={normal} />
       </div>
