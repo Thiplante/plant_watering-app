@@ -1,7 +1,7 @@
 // src/app/plants/[id]/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
@@ -17,6 +17,8 @@ export default function PlantDetailPage() {
   const [shareEmail, setShareEmail] = useState("");
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editingLogDate, setEditingLogDate] = useState("");
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [updatingImage, setUpdatingImage] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -31,6 +33,11 @@ export default function PlantDetailPage() {
       loadData();
     }
   }, [plantId]);
+
+  const previewUrl = useMemo(() => {
+    if (!newImageFile) return "";
+    return URL.createObjectURL(newImageFile);
+  }, [newImageFile]);
 
   const loadData = async () => {
     setLoading(true);
@@ -63,6 +70,60 @@ export default function PlantDetailPage() {
     });
 
     setLoading(false);
+  };
+
+  const uploadNewImage = async () => {
+    if (!newImageFile) return;
+
+    setUpdatingImage(true);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const fileExt = newImageFile.name.split(".").pop() || "png";
+      const fileName = `${user.id}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("plant-images")
+        .upload(fileName, newImageFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        alert(uploadError.message);
+        setUpdatingImage(false);
+        return;
+      }
+
+      const { data } = supabase.storage.from("plant-images").getPublicUrl(fileName);
+
+      await supabase
+        .from("plants")
+        .update({ image_url: data.publicUrl })
+        .eq("id", plantId);
+
+      setNewImageFile(null);
+      await loadData();
+      setUpdatingImage(false);
+    } catch (error: any) {
+      alert(error.message);
+      setUpdatingImage(false);
+    }
+  };
+
+  const removeImage = async () => {
+    await supabase.from("plants").update({ image_url: null }).eq("id", plantId);
+    loadData();
   };
 
   const handleUpdatePlant = async () => {
@@ -226,6 +287,52 @@ export default function PlantDetailPage() {
             <p className="subtle-text mt-4">
               Dernier arrosage : <strong>{formatFullDate(plant.last_watered_at)}</strong>
             </p>
+          </div>
+
+          <div className="mb-8">
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="Nouvelle photo"
+                className="w-full h-[300px] object-cover rounded-[28px] mb-4"
+              />
+            ) : plant.image_url ? (
+              <img
+                src={plant.image_url}
+                alt={plant.name}
+                className="w-full h-[300px] object-cover rounded-[28px] mb-4"
+              />
+            ) : (
+              <div className="soft-card h-[300px] rounded-[28px] mb-4 flex items-center justify-center subtle-text">
+                🌿 Pas encore de photo
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => setNewImageFile(e.target.files?.[0] || null)}
+                className="input-elegant"
+              />
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  onClick={uploadNewImage}
+                  disabled={!newImageFile || updatingImage}
+                  className="btn-primary"
+                >
+                  {updatingImage ? "Upload..." : "Mettre à jour la photo"}
+                </button>
+
+                {plant.image_url && (
+                  <button onClick={removeImage} className="btn-secondary">
+                    Retirer la photo
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="grid-elegant-2 mb-6">

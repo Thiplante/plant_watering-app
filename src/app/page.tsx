@@ -1,3 +1,4 @@
+// src/app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -17,7 +18,10 @@ export default function HomePage() {
   const fetchPlants = async () => {
     setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     if (!user) {
       router.push("/login");
       return;
@@ -26,38 +30,53 @@ export default function HomePage() {
     const { data: myPlants } = await supabase
       .from("plants")
       .select("*")
-      .eq("owner_id", user.id);
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: false });
 
     const { data: shares } = await supabase
       .from("plant_shares")
       .select("plant_id")
-      .eq("user_email", user.email);
+      .eq("user_email", user.email?.toLowerCase());
 
     let sharedPlants: any[] = [];
 
-    if (shares?.length) {
-      const ids = shares.map((s) => s.plant_id);
-      const { data } = await supabase.from("plants").select("*").in("id", ids);
+    if (shares && shares.length > 0) {
+      const ids = shares.map((share) => share.plant_id);
+
+      const { data } = await supabase
+        .from("plants")
+        .select("*")
+        .in("id", ids)
+        .order("created_at", { ascending: false });
+
       sharedPlants = data || [];
     }
 
-    const unique = new Map();
-    [...(myPlants || []), ...sharedPlants].forEach((p) => {
-      unique.set(p.id, p);
+    const uniquePlantsMap = new Map();
+
+    [...(myPlants || []), ...sharedPlants].forEach((plant) => {
+      uniquePlantsMap.set(plant.id, plant);
     });
 
-    setPlants(Array.from(unique.values()));
+    setPlants(Array.from(uniquePlantsMap.values()));
     setLoading(false);
   };
 
-  const handleWater = async (e: any, plant: any) => {
+  const handleQuickWater = async (e: React.MouseEvent, plant: any) => {
     e.preventDefault();
+
     const now = new Date().toISOString();
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     await supabase.from("plants").update({ last_watered_at: now }).eq("id", plant.id);
+
     await supabase.from("watering_logs").insert({
       plant_id: plant.id,
       watered_at: now,
+      user_id: user?.id,
     });
 
     fetchPlants();
@@ -125,9 +144,7 @@ export default function HomePage() {
       </h2>
 
       {plants.length === 0 ? (
-        <div className="soft-card center-empty">
-          Rien ici 🌱
-        </div>
+        <div className="soft-card center-empty">Rien ici 🌱</div>
       ) : (
         <div className="grid-elegant grid-elegant-3">
           {plants.map((plant: any) => {
@@ -136,17 +153,26 @@ export default function HomePage() {
             return (
               <Link key={plant.id} href={`/plants/${plant.id}`}>
                 <div className="plant-card">
+                  {plant.image_url ? (
+                    <img
+                      src={plant.image_url}
+                      alt={plant.name}
+                      className="w-full h-[220px] object-cover rounded-[24px] mb-5"
+                    />
+                  ) : (
+                    <div className="soft-card h-[220px] rounded-[24px] mb-5 flex items-center justify-center subtle-text">
+                      🌿 Pas encore de photo
+                    </div>
+                  )}
 
                   <h3 className="plant-title">{plant.name}</h3>
 
                   <div className="pill-row mb-4">
-                    <span className="pill">📍 {plant.city}</span>
-                    <span className="pill">☀️ {plant.exposure}</span>
+                    <span className="pill">📍 {plant.city || "Ville inconnue"}</span>
+                    <span className="pill">☀️ {plant.exposure || "Non définie"}</span>
                   </div>
 
-                  {/* NOUVEAU BLOC */}
                   <div className="space-y-2 mb-4">
-
                     <div className="status-card">
                       <span className="status-label">Dernier</span>
                       <span className="status-value">{dates.last}</span>
@@ -154,20 +180,22 @@ export default function HomePage() {
 
                     <div className={`status-card ${danger ? "status-card-danger" : ""}`}>
                       <span className="status-label">Prochain</span>
-                      <span className={danger ? "status-value status-value-danger" : "status-value"}>
+                      <span
+                        className={
+                          danger ? "status-value status-value-danger" : "status-value"
+                        }
+                      >
                         {dates.isOverdue ? "RETARD" : dates.next}
                       </span>
                     </div>
-
                   </div>
 
                   <button
-                    onClick={(e) => handleWater(e, plant)}
+                    onClick={(e) => handleQuickWater(e, plant)}
                     className="btn-primary w-full"
                   >
                     💧 Arroser
                   </button>
-
                 </div>
               </Link>
             );
@@ -180,7 +208,6 @@ export default function HomePage() {
   return (
     <main className="page-shell">
       <div className="page-container">
-
         <div className="topbar-blur p-6 mb-10">
           <h1 className="hero-title">Dashboard 🌿</h1>
           <p className="subtle-text mt-2">
@@ -191,7 +218,6 @@ export default function HomePage() {
         <Section title="🚨 En retard" plants={overdue} danger />
         <Section title="⏰ À arroser aujourd’hui" plants={today} />
         <Section title="🌱 Tout va bien" plants={normal} />
-
       </div>
     </main>
   );
