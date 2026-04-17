@@ -81,6 +81,21 @@ export default function HomePage() {
     fetchPlants();
   };
 
+  const getFriendlyLastLabel = (lastDate: string) => {
+    const now = new Date();
+    const last = new Date(lastDate);
+
+    const startNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startLast = new Date(last.getFullYear(), last.getMonth(), last.getDate());
+
+    const diffMs = startNow.getTime() - startLast.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return "Aujourd’hui";
+    if (diffDays === 1) return "Hier";
+    return `Il y a ${diffDays} jours`;
+  };
+
   const getDates = (plant: any) => {
     if (!plant.last_watered_at) {
       return {
@@ -97,8 +112,11 @@ export default function HomePage() {
     const next = new Date(plant.last_watered_at);
     next.setDate(next.getDate() + plant.watering_frequency_days);
 
-    const diffMs = next.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const startNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startNext = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+
+    const diffMs = startNext.getTime() - startNow.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     let label = "";
     let isOverdue = false;
@@ -117,7 +135,7 @@ export default function HomePage() {
     }
 
     return {
-      last: last.toLocaleDateString("fr-FR"),
+      last: getFriendlyLastLabel(plant.last_watered_at),
       next: next.toLocaleDateString("fr-FR"),
       label,
       isOverdue,
