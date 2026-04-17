@@ -35,17 +35,17 @@ export default function NewPlantPage() {
       setLoading(false);
     };
 
-    checkUser();
+    void checkUser();
   }, [router]);
 
   const handleCreate = async () => {
     if (!name.trim() || !city.trim()) {
-      alert("Le nom et la ville sont obligatoires pour le suivi météo.");
+      alert("Le nom et la ville sont obligatoires pour le suivi meteo.");
       return;
     }
 
     if (frequency <= 0) {
-      alert("La fréquence doit être supérieure à 0.");
+      alert("La frequence doit etre superieure a 0.");
       return;
     }
 
@@ -80,19 +80,19 @@ export default function NewPlantPage() {
       }
 
       if (!newPlant?.id) {
-        throw new Error("La plante a été créée mais son identifiant est introuvable.");
+        throw new Error("La plante a ete creee mais son identifiant est introuvable.");
       }
 
       try {
         await refreshPlantWeather(newPlant.id);
       } catch (weatherError) {
-        console.error("Erreur météo après création :", weatherError);
+        console.error("Erreur meteo apres creation :", weatherError);
       }
 
       router.push(`/plants/${newPlant.id}`);
       router.refresh();
     } catch (error: unknown) {
-      alert("Erreur lors de la création : " + getErrorMessage(error, "Inconnue"));
+      alert("Erreur lors de la creation : " + getErrorMessage(error, "Inconnue"));
     } finally {
       setSaving(false);
     }
@@ -113,12 +113,12 @@ export default function NewPlantPage() {
           href="/"
           className="text-sm font-black text-green-700 transition-all hover:tracking-widest"
         >
-          ← RETOUR À LA JUNGLE
+          RETOUR AU DASHBOARD
         </Link>
 
         <div className="mt-8 rounded-[40px] border border-green-100 bg-white p-10 shadow-2xl">
           <h1 className="mb-8 text-4xl font-black italic tracking-tighter text-gray-900">
-            Nouveau Bébé 🌿
+            Nouvelle plante
           </h1>
 
           <div className="space-y-6">
@@ -138,7 +138,7 @@ export default function NewPlantPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
-                  Ville (Météo)
+                  Ville (meteo)
                 </label>
                 <input
                   type="text"
@@ -151,7 +151,7 @@ export default function NewPlantPage() {
 
               <div>
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
-                  Fréquence (jours)
+                  Frequence (jours)
                 </label>
                 <input
                   type="number"
@@ -172,9 +172,9 @@ export default function NewPlantPage() {
                 onChange={(e) => setExposure(e.target.value)}
                 className="w-full appearance-none rounded-2xl border-2 border-transparent bg-gray-50 px-6 py-4 font-bold outline-none transition-all focus:border-green-500"
               >
-                <option value="soleil">Plein Soleil ☀️</option>
-                <option value="mi-ombre">Mi-ombre 🌤️</option>
-                <option value="ombre">Ombre ☁️</option>
+                <option value="soleil">Plein soleil</option>
+                <option value="mi-ombre">Mi-ombre</option>
+                <option value="ombre">Ombre</option>
               </select>
             </div>
 
@@ -191,7 +191,7 @@ export default function NewPlantPage() {
                     Arrosage par la pluie ?
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-tighter text-blue-400">
-                    Active le suivi météo réel
+                    Active le suivi meteo reel
                   </span>
                 </div>
               </label>
@@ -200,7 +200,7 @@ export default function NewPlantPage() {
             <button
               onClick={handleCreate}
               disabled={saving}
-              className="w-full rounded-3xl bg-green-600 py-6 text-lg font-black uppercase tracking-widest text-white shadow-xl shadow-green-600/30 transition-all active:scale-95 hover:bg-green-700 disabled:opacity-50"
+              className="w-full rounded-3xl bg-green-600 py-6 text-lg font-black uppercase tracking-widest text-white shadow-xl shadow-green-600/30 transition-all hover:bg-green-700 active:scale-95 disabled:opacity-50"
             >
               {saving ? "ENREGISTREMENT..." : "ENREGISTRER LA PLANTE"}
             </button>

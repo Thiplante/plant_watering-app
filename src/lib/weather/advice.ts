@@ -3,7 +3,7 @@ import type { PlantWeatherForecast } from "./forecast";
 export type WeatherAdvice = {
   advice: string;
   score: number;
-  tag: "rain" | "heat" | "normal";
+  tag: "rain" | "heat" | "watch" | "normal";
 };
 
 export function buildWeatherAdvice(
@@ -13,7 +13,7 @@ export function buildWeatherAdvice(
 
   if (!tomorrow) {
     return {
-      advice: "Météo indisponible pour le moment",
+      advice: "Meteo indisponible pour le moment",
       score: 0,
       tag: "normal",
     };
@@ -25,7 +25,7 @@ export function buildWeatherAdvice(
 
   if (rainProb >= 65 || rainSum >= 3) {
     return {
-      advice: "🌧️ Pas besoin d’arroser demain",
+      advice: "Pas besoin d'arroser demain",
       score: -2,
       tag: "rain",
     };
@@ -33,14 +33,22 @@ export function buildWeatherAdvice(
 
   if (tempMax >= 30) {
     return {
-      advice: "☀️ Forte chaleur prévue, pense à arroser plus tôt",
+      advice: "Arroser plus tot, une forte chaleur est prevue",
       score: 2,
       tag: "heat",
     };
   }
 
+  if (tempMax >= 25) {
+    return {
+      advice: "Surveille l'humidite du terreau demain",
+      score: 1,
+      tag: "watch",
+    };
+  }
+
   return {
-    advice: "🌤️ Conditions normales, suis le rythme habituel",
+    advice: "Conditions normales, suis le rythme habituel",
     score: 0,
     tag: "normal",
   };

@@ -31,10 +31,7 @@ export async function POST(req: NextRequest) {
     const plantId = body?.plantId as string | undefined;
 
     if (!plantId) {
-      return NextResponse.json(
-        { error: "plantId manquant" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "plantId manquant" }, { status: 400 });
     }
 
     const { data: plant, error: plantError } = await supabase
@@ -44,10 +41,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (plantError || !plant) {
-      return NextResponse.json(
-        { error: "Plante introuvable" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Plante introuvable" }, { status: 404 });
     }
 
     let latitude: number | null = plant.latitude;
@@ -58,7 +52,7 @@ export async function POST(req: NextRequest) {
 
       if (!geo) {
         return NextResponse.json(
-          { error: "Ville introuvable pour le géocodage" },
+          { error: "Ville introuvable pour le geocodage" },
           { status: 400 }
         );
       }
@@ -84,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     if (latitude == null || longitude == null) {
       return NextResponse.json(
-        { error: "Coordonnées météo indisponibles" },
+        { error: "Coordonnees meteo indisponibles" },
         { status: 400 }
       );
     }
@@ -103,10 +97,7 @@ export async function POST(req: NextRequest) {
       .eq("id", plantId);
 
     if (updateError) {
-      return NextResponse.json(
-        { error: updateError.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -123,9 +114,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("POST /api/weather/refresh error:", error);
 
-    return NextResponse.json(
-      { error: "Erreur serveur météo" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erreur serveur meteo" }, { status: 500 });
   }
 }

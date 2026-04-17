@@ -10,7 +10,7 @@ export async function refreshPlantWeather(plantId: string) {
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data?.error || "Impossible de rafraîchir la météo");
+    throw new Error(data?.error || "Impossible de rafraichir la meteo");
   }
 
   return data;

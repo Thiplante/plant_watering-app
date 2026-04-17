@@ -5,8 +5,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
+import {
+  getAdaptiveWateringInsight,
+  getHealthInsight,
+  getWeatherInsight,
+} from "@/lib/plants/insights";
 import { supabase } from "@/lib/supabase";
-import type { Plant, WateringLog } from "@/lib/types";
+import type { Plant, PlantShare, WateringLog } from "@/lib/types";
 
 type PlantForm = {
   name: string;
@@ -14,6 +19,12 @@ type PlantForm = {
   exposure: string;
   frequency: number;
   rain: boolean;
+};
+
+type PlantNotes = {
+  repottedAt: string;
+  leafStatus: string;
+  fertilizerAddedAt: string;
 };
 
 type PlantUpdatePayload = Pick<
@@ -30,8 +41,29 @@ type PlantUpdatePayload = Pick<
   | "weather_updated_at"
 >;
 
+const EMPTY_NOTES: PlantNotes = {
+  repottedAt: "",
+  leafStatus: "",
+  fertilizerAddedAt: "",
+};
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function toneClasses(tone: string) {
+  switch (tone) {
+    case "rain":
+    case "good":
+      return "bg-emerald-50 text-emerald-800 border border-emerald-100";
+    case "heat":
+    case "danger":
+      return "bg-rose-50 text-rose-800 border border-rose-100";
+    case "watch":
+      return "bg-amber-50 text-amber-800 border border-amber-100";
+    default:
+      return "bg-slate-50 text-slate-700 border border-slate-100";
+  }
 }
 
 export default function PlantDetailPage() {
@@ -41,6 +73,7 @@ export default function PlantDetailPage() {
 
   const [plant, setPlant] = useState<Plant | null>(null);
   const [history, setHistory] = useState<WateringLog[]>([]);
+  const [sharedWith, setSharedWith] = useState<PlantShare[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareEmail, setShareEmail] = useState("");
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -49,7 +82,9 @@ export default function PlantDetailPage() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [updatingImage, setUpdatingImage] = useState(false);
   const [savingPlant, setSavingPlant] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
   const [weatherRefreshing, setWeatherRefreshing] = useState(false);
+  const [notes, setNotes] = useState<PlantNotes>(EMPTY_NOTES);
 
   const [form, setForm] = useState<PlantForm>({
     name: "",
@@ -78,20 +113,20 @@ export default function PlantDetailPage() {
 
     setLoading(true);
 
-    const { data: plantDataRaw } = await supabase
-      .from("plants")
-      .select("*")
-      .eq("id", plantId)
-      .single();
-
-    const { data: historyDataRaw } = await supabase
-      .from("watering_logs")
-      .select("*")
-      .eq("plant_id", plantId)
-      .order("watered_at", { ascending: false });
+    const [{ data: plantDataRaw }, { data: historyDataRaw }, { data: sharesDataRaw }] =
+      await Promise.all([
+        supabase.from("plants").select("*").eq("id", plantId).single(),
+        supabase
+          .from("watering_logs")
+          .select("*")
+          .eq("plant_id", plantId)
+          .order("watered_at", { ascending: false }),
+        supabase.from("plant_shares").select("plant_id, user_email").eq("plant_id", plantId),
+      ]);
 
     const plantData = plantDataRaw as Plant | null;
     const historyData = (historyDataRaw || []) as WateringLog[];
+    const sharesData = (sharesDataRaw || []) as PlantShare[];
 
     if (!plantData) {
       router.push("/");
@@ -100,6 +135,7 @@ export default function PlantDetailPage() {
 
     setPlant(plantData);
     setHistory(historyData);
+    setSharedWith(sharesData);
     setForm({
       name: plantData.name || "",
       city: plantData.city || "",
@@ -114,6 +150,35 @@ export default function PlantDetailPage() {
     if (!plantId) return;
     void loadData();
   }, [plantId, loadData]);
+
+  useEffect(() => {
+    if (!plantId || typeof window === "undefined") return;
+
+    const saved = window.localStorage.getItem(`plant-notes:${plantId}`);
+    if (!saved) {
+      setNotes(EMPTY_NOTES);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(saved) as PlantNotes;
+      setNotes({
+        repottedAt: parsed.repottedAt || "",
+        leafStatus: parsed.leafStatus || "",
+        fertilizerAddedAt: parsed.fertilizerAddedAt || "",
+      });
+    } catch {
+      setNotes(EMPTY_NOTES);
+    }
+  }, [plantId]);
+
+  const saveNotes = async () => {
+    if (!plantId || typeof window === "undefined") return;
+
+    setSavingNotes(true);
+    window.localStorage.setItem(`plant-notes:${plantId}`, JSON.stringify(notes));
+    setTimeout(() => setSavingNotes(false), 250);
+  };
 
   const refreshWeather = async () => {
     if (!plantId) return;
@@ -321,14 +386,28 @@ export default function PlantDetailPage() {
   const handleShare = async () => {
     if (!plantId || !shareEmail.trim()) return;
 
+    const normalizedEmail = shareEmail.trim().toLowerCase();
     const { error } = await supabase.from("plant_shares").insert({
       plant_id: plantId,
-      user_email: shareEmail.trim().toLowerCase(),
+      user_email: normalizedEmail,
     });
 
     if (!error) {
       setShareEmail("");
+      await loadData();
     }
+  };
+
+  const handleRemoveShare = async (email: string) => {
+    if (!plantId) return;
+
+    await supabase
+      .from("plant_shares")
+      .delete()
+      .eq("plant_id", plantId)
+      .eq("user_email", email);
+
+    await loadData();
   };
 
   const toDatetimeLocalValue = (dateString: string) => {
@@ -384,6 +463,10 @@ export default function PlantDetailPage() {
     );
   }
 
+  const weatherInsight = getWeatherInsight(plant);
+  const healthInsight = getHealthInsight(plant);
+  const adaptiveInsight = getAdaptiveWateringInsight(plant);
+
   return (
     <main className="page-shell">
       <div className="page-container-narrow">
@@ -406,6 +489,34 @@ export default function PlantDetailPage() {
             <p className="subtle-text mt-4">
               Dernier arrosage : <strong>{formatFullDate(plant.last_watered_at)}</strong>
             </p>
+          </div>
+
+          <div className="mb-6 grid gap-3 md:grid-cols-3">
+            <div className={`rounded-[28px] px-5 py-5 ${toneClasses(weatherInsight.tone)}`}>
+              <p className="mb-2 text-xs font-black uppercase tracking-[0.22em]">Meteo</p>
+              <p className="text-lg font-black">{weatherInsight.label}</p>
+              <p className="mt-2 text-sm font-semibold">{weatherInsight.detail}</p>
+            </div>
+
+            <div className={`rounded-[28px] px-5 py-5 ${toneClasses(healthInsight.tone)}`}>
+              <p className="mb-2 text-xs font-black uppercase tracking-[0.22em]">Sante</p>
+              <p className="text-lg font-black">{healthInsight.label}</p>
+              <p className="mt-2 text-sm font-semibold">{healthInsight.detail}</p>
+            </div>
+
+            <div className="rounded-[28px] border border-[rgba(35,75,52,0.08)] bg-white/85 px-5 py-5">
+              <p className="mb-2 text-xs font-black uppercase tracking-[0.22em] text-[#6c7d70]">
+                Arrosage adaptatif
+              </p>
+              <p className="text-lg font-black text-[#183624]">{adaptiveInsight.label}</p>
+              <p className="mt-2 text-sm font-semibold text-[#425345]">
+                Intervalle recommande : {adaptiveInsight.minDays}
+                {adaptiveInsight.maxDays !== adaptiveInsight.minDays
+                  ? ` a ${adaptiveInsight.maxDays}`
+                  : ""}{" "}
+                jours
+              </p>
+            </div>
           </div>
 
           <div className="mb-8">
@@ -587,10 +698,60 @@ export default function PlantDetailPage() {
         </section>
 
         <section className="soft-card mb-6 p-6 md:p-8">
-          <p className="eyebrow mb-3">Partage</p>
-          <h2 className="section-title mb-5">Partager cette plante</h2>
+          <p className="eyebrow mb-3">Notes</p>
+          <h2 className="section-title mb-5">Suivi pratique de la plante</h2>
 
-          <div className="flex flex-col gap-3 md:flex-row">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="field">
+              <label className="field-label">Rempotee le</label>
+              <input
+                type="date"
+                value={notes.repottedAt}
+                onChange={(event) =>
+                  setNotes({ ...notes, repottedAt: event.target.value })
+                }
+                className="input-elegant"
+              />
+            </div>
+
+            <div className="field">
+              <label className="field-label">Engrais ajoute le</label>
+              <input
+                type="date"
+                value={notes.fertilizerAddedAt}
+                onChange={(event) =>
+                  setNotes({ ...notes, fertilizerAddedAt: event.target.value })
+                }
+                className="input-elegant"
+              />
+            </div>
+          </div>
+
+          <div className="field mt-4">
+            <label className="field-label">Observation feuilles</label>
+            <textarea
+              value={notes.leafStatus}
+              onChange={(event) => setNotes({ ...notes, leafStatus: event.target.value })}
+              className="textarea-elegant"
+              placeholder="Ex: feuilles jaunes, nouvelles pousses, terre tres seche..."
+            />
+          </div>
+
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <p className="text-sm subtle-text">
+              Notes sauvegardees localement sur cet appareil pour l&apos;instant.
+            </p>
+            <button onClick={saveNotes} className="btn-secondary">
+              {savingNotes ? "Sauvegarde..." : "Enregistrer les notes"}
+            </button>
+          </div>
+        </section>
+
+        <section className="soft-card mb-6 p-6 md:p-8">
+          <p className="eyebrow mb-3">Partage</p>
+          <h2 className="section-title mb-5">Acces et collaboration</h2>
+
+          <div className="mb-5 flex flex-col gap-3 md:flex-row">
             <input
               type="email"
               placeholder="ami@mail.com"
@@ -599,8 +760,35 @@ export default function PlantDetailPage() {
               className="input-elegant"
             />
             <button onClick={handleShare} className="btn-secondary whitespace-nowrap">
-              Envoyer le partage
+              Inviter un proche
             </button>
+          </div>
+
+          <div className="space-y-3">
+            {sharedWith.length === 0 ? (
+              <div className="rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-white/80 px-5 py-4 text-sm font-semibold text-[#4e6052]">
+                Aucun acces partage pour le moment.
+              </div>
+            ) : (
+              sharedWith.map((share) => (
+                <div
+                  key={share.user_email}
+                  className="history-item"
+                >
+                  <div>
+                    <p className="font-extrabold text-[#183624]">{share.user_email}</p>
+                    <p className="history-date">Acces collaboratif actif</p>
+                  </div>
+
+                  <button
+                    onClick={() => handleRemoveShare(share.user_email)}
+                    className="btn-secondary"
+                  >
+                    Retirer l&apos;acces
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
@@ -643,14 +831,14 @@ export default function PlantDetailPage() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => startEditLog(log)}
-                          className="icon-action"
+                          className="btn-secondary"
                           title="Modifier"
                         >
                           Modifier
                         </button>
                         <button
                           onClick={() => handleDeleteLog(log.id)}
-                          className="icon-action"
+                          className="btn-secondary"
                           title="Supprimer"
                         >
                           Supprimer

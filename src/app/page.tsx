@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Plant, PlantShare } from "@/lib/types";
+import {
+  getAdaptiveWateringInsight,
+  getDashboardNotifications,
+  getHealthInsight,
+  getWeatherInsight,
+} from "@/lib/plants/insights";
 
 type PlantStatus = "unknown" | "overdue" | "today" | "ok";
 
@@ -23,6 +29,21 @@ type SectionProps = {
   getDates: (plant: Plant) => PlantDateInfo;
 };
 
+function toneClasses(tone: string) {
+  switch (tone) {
+    case "rain":
+    case "good":
+      return "bg-emerald-50 text-emerald-800 border border-emerald-100";
+    case "heat":
+    case "danger":
+      return "bg-rose-50 text-rose-800 border border-rose-100";
+    case "watch":
+      return "bg-amber-50 text-amber-800 border border-amber-100";
+    default:
+      return "bg-slate-50 text-slate-700 border border-slate-100";
+  }
+}
+
 function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
   return (
     <section className="mb-10">
@@ -36,6 +57,9 @@ function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
         <div className="grid-elegant grid-elegant-3">
           {plants.map((plant) => {
             const dates = getDates(plant);
+            const weatherInsight = getWeatherInsight(plant);
+            const healthInsight = getHealthInsight(plant);
+            const adaptive = getAdaptiveWateringInsight(plant);
 
             return (
               <Link key={plant.id} href={`/plants/${plant.id}`}>
@@ -53,6 +77,15 @@ function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
                       Pas encore de photo
                     </div>
                   )}
+
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${toneClasses(weatherInsight.tone)}`}>
+                      {weatherInsight.label}
+                    </span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${toneClasses(healthInsight.tone)}`}>
+                      {healthInsight.label}
+                    </span>
+                  </div>
 
                   <h3 className="plant-title">{plant.name}</h3>
 
@@ -83,6 +116,22 @@ function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
                         {dates.label}
                       </span>
                     </div>
+                  </div>
+
+                  <div className="mb-4 rounded-[24px] bg-[#f7faf7] px-4 py-4">
+                    <p className="mb-1 text-xs font-black uppercase tracking-[0.22em] text-[#6f7f73]">
+                      Dashboard meteo
+                    </p>
+                    <p className="text-sm font-semibold text-[#193425]">
+                      {weatherInsight.detail}
+                    </p>
+                    <p className="mt-3 text-xs font-semibold text-[#516154]">
+                      {adaptive.label}: {adaptive.minDays}
+                      {adaptive.maxDays !== adaptive.minDays
+                        ? ` a ${adaptive.maxDays}`
+                        : ""}{" "}
+                      jours
+                    </p>
                   </div>
 
                   <button
@@ -256,6 +305,7 @@ export default function HomePage() {
   const overdue = plants.filter((plant) => getStatus(plant) === "overdue");
   const today = plants.filter((plant) => getStatus(plant) === "today");
   const normal = plants.filter((plant) => getStatus(plant) === "ok");
+  const notifications = getDashboardNotifications(plants);
 
   if (loading) {
     return (
@@ -270,12 +320,36 @@ export default function HomePage() {
   return (
     <main className="page-shell">
       <div className="page-container">
-        <div className="topbar-blur mb-10 p-6">
-          <h1 className="hero-title">Dashboard</h1>
+        <div className="topbar-blur mb-6 p-6">
+          <h1 className="hero-title">Dashboard intelligent</h1>
           <p className="subtle-text mt-2">
-            Gere facilement l&apos;arrosage de toutes tes plantes
+            Gere l&apos;arrosage, la meteo et les signaux de risque en un coup d&apos;oeil
           </p>
         </div>
+
+        <section className="glass-card mb-10 p-6 md:p-8">
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="eyebrow mb-2">Notifications</p>
+              <h2 className="section-title !mb-0">Centre d&apos;attention</h2>
+            </div>
+
+            <div className="rounded-full bg-[#edf4ee] px-4 py-2 text-sm font-extrabold text-[#1d3a28]">
+              {plants.length} plantes suivies
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {notifications.map((message) => (
+              <div
+                key={message}
+                className="rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-white/80 px-5 py-4 text-sm font-semibold text-[#1e3223]"
+              >
+                {message}
+              </div>
+            ))}
+          </div>
+        </section>
 
         <Section
           title="En retard"
@@ -284,7 +358,7 @@ export default function HomePage() {
           getDates={getDates}
         />
         <Section
-          title="A arroser aujourd&apos;hui"
+          title="A arroser aujourd'hui"
           plants={today}
           onQuickWater={handleQuickWater}
           getDates={getDates}

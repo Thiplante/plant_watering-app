@@ -22,9 +22,7 @@ export default function RefreshWeatherButton({ plantId }: Props) {
       router.refresh();
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Erreur lors du rafraîchissement météo"
+        err instanceof Error ? err.message : "Erreur lors du rafraichissement meteo"
       );
     } finally {
       setLoading(false);
@@ -39,7 +37,7 @@ export default function RefreshWeatherButton({ plantId }: Props) {
         disabled={loading}
         className="btn-secondary"
       >
-        {loading ? "Actualisation..." : "Actualiser la météo"}
+        {loading ? "Actualisation..." : "Actualiser la meteo"}
       </button>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
