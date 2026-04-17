@@ -6,6 +6,10 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { refreshPlantWeather } from "@/lib/weather/actions";
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function NewPlantPage() {
   const [name, setName] = useState("");
   const [frequency, setFrequency] = useState(3);
@@ -87,8 +91,8 @@ export default function NewPlantPage() {
 
       router.push(`/plants/${newPlant.id}`);
       router.refresh();
-    } catch (error: any) {
-      alert("Erreur lors de la création : " + error.message);
+    } catch (error: unknown) {
+      alert("Erreur lors de la création : " + getErrorMessage(error, "Inconnue"));
     } finally {
       setSaving(false);
     }

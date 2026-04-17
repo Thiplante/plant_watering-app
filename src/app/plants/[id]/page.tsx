@@ -1,28 +1,57 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
+import { supabase } from "@/lib/supabase";
+import type { Plant, WateringLog } from "@/lib/types";
+
+type PlantForm = {
+  name: string;
+  city: string;
+  exposure: string;
+  frequency: number;
+  rain: boolean;
+};
+
+type PlantUpdatePayload = Pick<
+  Plant,
+  | "name"
+  | "city"
+  | "exposure"
+  | "watering_frequency_days"
+  | "can_be_watered_by_rain"
+  | "latitude"
+  | "longitude"
+  | "weather_advice"
+  | "weather_score"
+  | "weather_updated_at"
+>;
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export default function PlantDetailPage() {
-  const params = useParams();
-  const plantId = params.id as string;
+  const params = useParams<{ id: string | string[] }>();
+  const plantId = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
 
-  const [plant, setPlant] = useState<any>(null);
-  const [history, setHistory] = useState<any[]>([]);
+  const [plant, setPlant] = useState<Plant | null>(null);
+  const [history, setHistory] = useState<WateringLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareEmail, setShareEmail] = useState("");
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editingLogDate, setEditingLogDate] = useState("");
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [updatingImage, setUpdatingImage] = useState(false);
   const [savingPlant, setSavingPlant] = useState(false);
   const [weatherRefreshing, setWeatherRefreshing] = useState(false);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<PlantForm>({
     name: "",
     city: "",
     exposure: "mi-ombre",
@@ -31,50 +60,64 @@ export default function PlantDetailPage() {
   });
 
   useEffect(() => {
-    if (plantId) {
-      loadData();
+    if (!newImageFile) {
+      setPreviewUrl("");
+      return;
     }
-  }, [plantId]);
 
-  const previewUrl = useMemo(() => {
-    if (!newImageFile) return "";
-    return URL.createObjectURL(newImageFile);
+    const objectUrl = URL.createObjectURL(newImageFile);
+    setPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
   }, [newImageFile]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (!plantId) return;
+
     setLoading(true);
 
-    const { data: pData } = await supabase
+    const { data: plantDataRaw } = await supabase
       .from("plants")
       .select("*")
       .eq("id", plantId)
       .single();
 
-    const { data: hData } = await supabase
+    const { data: historyDataRaw } = await supabase
       .from("watering_logs")
       .select("*")
       .eq("plant_id", plantId)
       .order("watered_at", { ascending: false });
 
-    if (!pData) {
+    const plantData = plantDataRaw as Plant | null;
+    const historyData = (historyDataRaw || []) as WateringLog[];
+
+    if (!plantData) {
       router.push("/");
       return;
     }
 
-    setPlant(pData);
-    setHistory(hData || []);
+    setPlant(plantData);
+    setHistory(historyData);
     setForm({
-      name: pData.name || "",
-      city: pData.city || "",
-      exposure: pData.exposure || "mi-ombre",
-      frequency: pData.watering_frequency_days || 3,
-      rain: !!pData.can_be_watered_by_rain,
+      name: plantData.name || "",
+      city: plantData.city || "",
+      exposure: plantData.exposure || "mi-ombre",
+      frequency: plantData.watering_frequency_days || 3,
+      rain: Boolean(plantData.can_be_watered_by_rain),
     });
-
     setLoading(false);
-  };
+  }, [plantId, router]);
+
+  useEffect(() => {
+    if (!plantId) return;
+    void loadData();
+  }, [plantId, loadData]);
 
   const refreshWeather = async () => {
+    if (!plantId) return;
+
     try {
       setWeatherRefreshing(true);
 
@@ -86,23 +129,23 @@ export default function PlantDetailPage() {
         body: JSON.stringify({ plantId }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
 
       if (!res.ok) {
-        throw new Error(data?.error || "Impossible de rafraîchir la météo");
+        throw new Error(data.error || "Impossible de rafraichir la meteo");
       }
 
       await loadData();
       router.refresh();
-    } catch (error: any) {
-      alert(error.message || "Erreur lors de l’actualisation météo");
+    } catch (error: unknown) {
+      alert(getErrorMessage(error, "Erreur lors de l'actualisation meteo"));
     } finally {
       setWeatherRefreshing(false);
     }
   };
 
   const uploadNewImage = async () => {
-    if (!newImageFile) return;
+    if (!newImageFile || !plantId) return;
 
     setUpdatingImage(true);
 
@@ -130,7 +173,6 @@ export default function PlantDetailPage() {
 
       if (uploadError) {
         alert(uploadError.message);
-        setUpdatingImage(false);
         return;
       }
 
@@ -143,19 +185,23 @@ export default function PlantDetailPage() {
 
       setNewImageFile(null);
       await loadData();
-      setUpdatingImage(false);
-    } catch (error: any) {
-      alert(error.message);
+    } catch (error: unknown) {
+      alert(getErrorMessage(error, "Erreur lors de la mise a jour de l'image"));
+    } finally {
       setUpdatingImage(false);
     }
   };
 
   const removeImage = async () => {
+    if (!plantId) return;
+
     await supabase.from("plants").update({ image_url: null }).eq("id", plantId);
-    loadData();
+    await loadData();
   };
 
   const handleUpdatePlant = async () => {
+    if (!plantId) return;
+
     try {
       setSavingPlant(true);
 
@@ -163,12 +209,17 @@ export default function PlantDetailPage() {
       const previousCity = (plant?.city || "").trim();
       const cityChanged = trimmedCity !== previousCity;
 
-      const updatePayload: any = {
+      const updatePayload: PlantUpdatePayload = {
         name: form.name.trim(),
         city: trimmedCity,
         exposure: form.exposure,
         watering_frequency_days: form.frequency,
         can_be_watered_by_rain: form.rain,
+        latitude: plant?.latitude ?? null,
+        longitude: plant?.longitude ?? null,
+        weather_advice: plant?.weather_advice ?? null,
+        weather_score: plant?.weather_score ?? null,
+        weather_updated_at: plant?.weather_updated_at ?? null,
       };
 
       if (cityChanged) {
@@ -193,44 +244,44 @@ export default function PlantDetailPage() {
       } else {
         await loadData();
       }
-    } catch (error: any) {
-      alert(error.message || "Erreur lors de la mise à jour");
+    } catch (error: unknown) {
+      alert(getErrorMessage(error, "Erreur lors de la mise a jour"));
     } finally {
       setSavingPlant(false);
     }
   };
 
   const handleDeletePlant = async () => {
-    if (!confirm("Supprimer cette plante ?")) return;
+    if (!plantId || !confirm("Supprimer cette plante ?")) return;
 
     await supabase.from("plants").delete().eq("id", plantId);
     router.push("/");
   };
 
   const handleWater = async () => {
-    const now = new Date().toISOString();
+    if (!plantId) return;
 
+    const now = new Date().toISOString();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
-
     await supabase.from("watering_logs").insert({
       plant_id: plantId,
       watered_at: now,
       user_id: user?.id,
     });
 
-    loadData();
+    await loadData();
   };
 
   const handleDeleteLog = async (logId: string) => {
     await supabase.from("watering_logs").delete().eq("id", logId);
-    loadData();
+    await loadData();
   };
 
-  const startEditLog = (log: any) => {
+  const startEditLog = (log: WateringLog) => {
     setEditingLogId(log.id);
     setEditingLogDate(toDatetimeLocalValue(log.watered_at));
   };
@@ -241,7 +292,7 @@ export default function PlantDetailPage() {
   };
 
   const handleUpdateLog = async () => {
-    if (!editingLogId || !editingLogDate) return;
+    if (!editingLogId || !editingLogDate || !plantId) return;
 
     const isoDate = new Date(editingLogDate).toISOString();
 
@@ -264,11 +315,11 @@ export default function PlantDetailPage() {
     }
 
     cancelEditLog();
-    loadData();
+    await loadData();
   };
 
   const handleShare = async () => {
-    if (!shareEmail.trim()) return;
+    if (!plantId || !shareEmail.trim()) return;
 
     const { error } = await supabase.from("plant_shares").insert({
       plant_id: plantId,
@@ -289,6 +340,7 @@ export default function PlantDetailPage() {
 
   const formatFullDate = (date?: string | null) => {
     if (!date) return "Jamais";
+
     return new Date(date).toLocaleString("fr-FR", {
       day: "numeric",
       month: "long",
@@ -302,19 +354,17 @@ export default function PlantDetailPage() {
     if (!weatherUpdatedAt) return true;
 
     const updatedAt = new Date(weatherUpdatedAt).getTime();
-    const now = Date.now();
     const maxAge = 24 * 60 * 60 * 1000;
-
-    return now - updatedAt > maxAge;
+    return Date.now() - updatedAt > maxAge;
   };
 
   if (loading) {
     return (
       <main className="page-shell">
         <div className="page-container-narrow">
-          <div className="center-empty glass-card">
+          <div className="glass-card center-empty">
             <p className="hero-title" style={{ fontSize: "2rem" }}>
-              🌿 Chargement...
+              Chargement...
             </p>
           </div>
         </div>
@@ -326,7 +376,7 @@ export default function PlantDetailPage() {
     return (
       <main className="page-shell">
         <div className="page-container-narrow">
-          <div className="center-empty glass-card">
+          <div className="glass-card center-empty">
             <p className="section-title">Plante introuvable</p>
           </div>
         </div>
@@ -337,17 +387,17 @@ export default function PlantDetailPage() {
   return (
     <main className="page-shell">
       <div className="page-container-narrow">
-        <div className="flex items-center justify-between gap-4 mb-6">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <Link href="/" className="btn-secondary">
-            ← Retour
+            Retour
           </Link>
 
           <button onClick={handleWater} className="btn-primary">
-            💧 Arroser
+            Arroser
           </button>
         </div>
 
-        <section className="glass-card p-6 md:p-8 mb-6">
+        <section className="glass-card mb-6 p-6 md:p-8">
           <div className="mb-8">
             <p className="eyebrow mb-3">Fiche plante</p>
             <h1 className="hero-title" style={{ fontSize: "clamp(2.2rem, 5vw, 3.8rem)" }}>
@@ -360,20 +410,25 @@ export default function PlantDetailPage() {
 
           <div className="mb-8">
             {previewUrl ? (
-              <img
+              <Image
                 src={previewUrl}
                 alt="Nouvelle photo"
-                className="w-full h-[300px] object-cover rounded-[28px] mb-4"
+                width={1200}
+                height={600}
+                unoptimized
+                className="mb-4 h-[300px] w-full rounded-[28px] object-cover"
               />
             ) : plant.image_url ? (
-              <img
+              <Image
                 src={plant.image_url}
                 alt={plant.name}
-                className="w-full h-[300px] object-cover rounded-[28px] mb-4"
+                width={1200}
+                height={600}
+                className="mb-4 h-[300px] w-full rounded-[28px] object-cover"
               />
             ) : (
-              <div className="soft-card h-[300px] rounded-[28px] mb-4 flex items-center justify-center subtle-text">
-                🌿 Pas encore de photo
+              <div className="soft-card mb-4 flex h-[300px] items-center justify-center rounded-[28px] subtle-text">
+                Pas encore de photo
               </div>
             )}
 
@@ -382,7 +437,7 @@ export default function PlantDetailPage() {
                 type="file"
                 accept="image/*"
                 capture="environment"
-                onChange={(e) => setNewImageFile(e.target.files?.[0] || null)}
+                onChange={(event) => setNewImageFile(event.target.files?.[0] || null)}
                 className="input-elegant"
               />
 
@@ -392,7 +447,7 @@ export default function PlantDetailPage() {
                   disabled={!newImageFile || updatingImage}
                   className="btn-primary"
                 >
-                  {updatingImage ? "Upload..." : "Mettre à jour la photo"}
+                  {updatingImage ? "Upload..." : "Mettre a jour la photo"}
                 </button>
 
                 {plant.image_url && (
@@ -404,11 +459,11 @@ export default function PlantDetailPage() {
             </div>
           </div>
 
-          <div className="soft-card p-5 mb-8">
-            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div className="soft-card mb-8 p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="eyebrow mb-2">Météo intelligente</p>
-                <h2 className="section-title !mb-0">Conseil météo</h2>
+                <p className="eyebrow mb-2">Meteo intelligente</p>
+                <h2 className="section-title !mb-0">Conseil meteo</h2>
               </div>
 
               <div className="flex items-center gap-3">
@@ -427,35 +482,35 @@ export default function PlantDetailPage() {
 
                 {plant.weather_updated_at && (
                   <p className="subtle-text text-sm">
-                    Mis à jour le {formatFullDate(plant.weather_updated_at)}
+                    Mis a jour le {formatFullDate(plant.weather_updated_at)}
                   </p>
                 )}
 
                 {isWeatherStale(plant.weather_updated_at) && (
                   <p className="text-sm font-semibold text-amber-700">
-                    Les données météo ne sont plus à jour.
+                    Les donnees meteo ne sont plus a jour.
                   </p>
                 )}
               </div>
             ) : (
               <div className="space-y-2">
                 <p className="subtle-text">
-                  Aucun conseil météo disponible pour le moment.
+                  Aucun conseil meteo disponible pour le moment.
                 </p>
                 <p className="text-sm font-semibold text-amber-700">
-                  Ajoute une ville correcte puis actualise la météo.
+                  Ajoute une ville correcte puis actualise la meteo.
                 </p>
               </div>
             )}
           </div>
 
-          <div className="grid-elegant-2 mb-6">
+          <div className="mb-6 grid-elegant-2">
             <div className="field">
               <label className="field-label">Nom</label>
               <input
                 type="text"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
                 className="input-elegant"
                 placeholder="Nom de la plante"
               />
@@ -466,7 +521,7 @@ export default function PlantDetailPage() {
               <input
                 type="text"
                 value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                onChange={(event) => setForm({ ...form, city: event.target.value })}
                 className="input-elegant"
                 placeholder="Ville"
               />
@@ -476,23 +531,23 @@ export default function PlantDetailPage() {
               <label className="field-label">Exposition lumineuse</label>
               <select
                 value={form.exposure}
-                onChange={(e) => setForm({ ...form, exposure: e.target.value })}
+                onChange={(event) => setForm({ ...form, exposure: event.target.value })}
                 className="select-elegant"
               >
-                <option value="soleil">☀️ Plein soleil</option>
-                <option value="mi-ombre">🌤️ Mi-ombre</option>
-                <option value="ombre">☁️ Ombre</option>
+                <option value="soleil">Plein soleil</option>
+                <option value="mi-ombre">Mi-ombre</option>
+                <option value="ombre">Ombre</option>
               </select>
             </div>
 
             <div className="field">
-              <label className="field-label">Fréquence d’arrosage (jours)</label>
+              <label className="field-label">Frequence d&apos;arrosage (jours)</label>
               <input
                 type="number"
                 min={1}
                 value={form.frequency}
-                onChange={(e) =>
-                  setForm({ ...form, frequency: Number(e.target.value) })
+                onChange={(event) =>
+                  setForm({ ...form, frequency: Number(event.target.value) })
                 }
                 className="input-elegant"
               />
@@ -503,12 +558,12 @@ export default function PlantDetailPage() {
             <input
               type="checkbox"
               checked={form.rain}
-              onChange={(e) => setForm({ ...form, rain: e.target.checked })}
+              onChange={(event) => setForm({ ...form, rain: event.target.checked })}
               className="checkbox-elegant"
             />
             <div>
-              <p className="font-extrabold text-[0.95rem] text-[#183624]">
-                🌧️ Arrosage par la pluie
+              <p className="text-[0.95rem] font-extrabold text-[#183624]">
+                Arrosage par la pluie
               </p>
               <p className="subtle-text text-sm">
                 Active le suivi pluie pour cette plante.
@@ -531,7 +586,7 @@ export default function PlantDetailPage() {
           </div>
         </section>
 
-        <section className="soft-card p-6 md:p-8 mb-6">
+        <section className="soft-card mb-6 p-6 md:p-8">
           <p className="eyebrow mb-3">Partage</p>
           <h2 className="section-title mb-5">Partager cette plante</h2>
 
@@ -540,7 +595,7 @@ export default function PlantDetailPage() {
               type="email"
               placeholder="ami@mail.com"
               value={shareEmail}
-              onChange={(e) => setShareEmail(e.target.value)}
+              onChange={(event) => setShareEmail(event.target.value)}
               className="input-elegant"
             />
             <button onClick={handleShare} className="btn-secondary whitespace-nowrap">
@@ -556,17 +611,17 @@ export default function PlantDetailPage() {
           <div className="space-y-3">
             {history.length === 0 ? (
               <div className="center-empty soft-card">
-                Aucun arrosage enregistré pour le moment.
+                Aucun arrosage enregistre pour le moment.
               </div>
             ) : (
               history.map((log) => (
                 <div key={log.id} className="history-item">
                   {editingLogId === log.id ? (
-                    <div className="w-full flex flex-col gap-3 md:flex-row md:items-center">
+                    <div className="flex w-full flex-col gap-3 md:flex-row md:items-center">
                       <input
                         type="datetime-local"
                         value={editingLogDate}
-                        onChange={(e) => setEditingLogDate(e.target.value)}
+                        onChange={(event) => setEditingLogDate(event.target.value)}
                         className="input-elegant"
                       />
                       <div className="flex gap-2">
@@ -581,7 +636,7 @@ export default function PlantDetailPage() {
                   ) : (
                     <>
                       <div>
-                        <p className="font-extrabold text-[#183624]">💧 Arrosage</p>
+                        <p className="font-extrabold text-[#183624]">Arrosage</p>
                         <p className="history-date">{formatFullDate(log.watered_at)}</p>
                       </div>
 
@@ -591,14 +646,14 @@ export default function PlantDetailPage() {
                           className="icon-action"
                           title="Modifier"
                         >
-                          ✏️
+                          Modifier
                         </button>
                         <button
                           onClick={() => handleDeleteLog(log.id)}
                           className="icon-action"
                           title="Supprimer"
                         >
-                          🗑️
+                          Supprimer
                         </button>
                       </div>
                     </>

@@ -17,7 +17,7 @@ export default function LoginPage() {
     if (error) {
       alert(error.message);
     } else {
-      alert("Connecté !");
+      alert("Connecte !");
       window.location.href = "/";
     }
   };
@@ -32,7 +32,7 @@ export default function LoginPage() {
               Se connecter
             </h1>
             <p className="mt-2 text-sm text-gray-600">
-              Accède à tes plantes et à ton suivi d’arrosage.
+              Accede a tes plantes et a ton suivi d&apos;arrosage.
             </p>
           </div>
 
@@ -56,7 +56,7 @@ export default function LoginPage() {
               </label>
               <input
                 type="password"
-                placeholder="••••••••"
+                placeholder="mot de passe"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 focus:bg-white"
@@ -74,7 +74,7 @@ export default function LoginPage() {
           <p className="mt-6 text-center text-sm text-gray-600">
             Pas encore de compte ?{" "}
             <Link href="/signup" className="font-semibold text-green-700 hover:text-green-800">
-              Créer un compte
+              Creer un compte
             </Link>
           </p>
         </div>

@@ -40,7 +40,7 @@ export default function SignupPage() {
     }
 
     setLoading(false);
-    alert("Compte créé ! Connecte-toi maintenant.");
+    alert("Compte cree ! Connecte-toi maintenant.");
     router.push("/login");
   };
 
@@ -51,7 +51,7 @@ export default function SignupPage() {
           Bienvenue !
         </h1>
         <p className="mb-8 font-medium text-gray-500">
-          Crée ton compte pour sauver tes plantes.
+          Cree ton compte pour sauver tes plantes.
         </p>
 
         <div className="space-y-4">
@@ -76,12 +76,12 @@ export default function SignupPage() {
             disabled={loading}
             className="w-full rounded-2xl bg-green-600 py-4 font-black text-white transition hover:bg-green-700 disabled:opacity-50"
           >
-            {loading ? "CRÉATION..." : "C'EST PARTI !"}
+            {loading ? "CREATION..." : "C'EST PARTI !"}
           </button>
         </div>
 
         <p className="mt-8 text-center text-sm font-bold text-gray-400">
-          Déjà un compte ?{" "}
+          Deja un compte ?{" "}
           <Link href="/login" className="text-green-600 underline">
             Se connecter
           </Link>
