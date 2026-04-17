@@ -1,10 +1,10 @@
-// src/app/plants/[id]/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
+import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
 
 export default function PlantDetailPage() {
   const params = useParams();
@@ -19,6 +19,8 @@ export default function PlantDetailPage() {
   const [editingLogDate, setEditingLogDate] = useState("");
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [updatingImage, setUpdatingImage] = useState(false);
+  const [savingPlant, setSavingPlant] = useState(false);
+  const [weatherRefreshing, setWeatherRefreshing] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -70,6 +72,33 @@ export default function PlantDetailPage() {
     });
 
     setLoading(false);
+  };
+
+  const refreshWeather = async () => {
+    try {
+      setWeatherRefreshing(true);
+
+      const res = await fetch("/api/weather/refresh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ plantId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Impossible de rafraîchir la météo");
+      }
+
+      await loadData();
+      router.refresh();
+    } catch (error: any) {
+      alert(error.message || "Erreur lors de l’actualisation météo");
+    } finally {
+      setWeatherRefreshing(false);
+    }
   };
 
   const uploadNewImage = async () => {
@@ -127,18 +156,48 @@ export default function PlantDetailPage() {
   };
 
   const handleUpdatePlant = async () => {
-    await supabase
-      .from("plants")
-      .update({
+    try {
+      setSavingPlant(true);
+
+      const trimmedCity = form.city.trim();
+      const previousCity = (plant?.city || "").trim();
+      const cityChanged = trimmedCity !== previousCity;
+
+      const updatePayload: any = {
         name: form.name.trim(),
-        city: form.city.trim(),
+        city: trimmedCity,
         exposure: form.exposure,
         watering_frequency_days: form.frequency,
         can_be_watered_by_rain: form.rain,
-      })
-      .eq("id", plantId);
+      };
 
-    loadData();
+      if (cityChanged) {
+        updatePayload.latitude = null;
+        updatePayload.longitude = null;
+        updatePayload.weather_advice = null;
+        updatePayload.weather_score = null;
+        updatePayload.weather_updated_at = null;
+      }
+
+      const { error } = await supabase
+        .from("plants")
+        .update(updatePayload)
+        .eq("id", plantId);
+
+      if (error) {
+        throw error;
+      }
+
+      if (cityChanged && trimmedCity) {
+        await refreshWeather();
+      } else {
+        await loadData();
+      }
+    } catch (error: any) {
+      alert(error.message || "Erreur lors de la mise à jour");
+    } finally {
+      setSavingPlant(false);
+    }
   };
 
   const handleDeletePlant = async () => {
@@ -239,6 +298,16 @@ export default function PlantDetailPage() {
     });
   };
 
+  const isWeatherStale = (weatherUpdatedAt?: string | null) => {
+    if (!weatherUpdatedAt) return true;
+
+    const updatedAt = new Date(weatherUpdatedAt).getTime();
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000;
+
+    return now - updatedAt > maxAge;
+  };
+
   if (loading) {
     return (
       <main className="page-shell">
@@ -335,6 +404,51 @@ export default function PlantDetailPage() {
             </div>
           </div>
 
+          <div className="soft-card p-5 mb-8">
+            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+              <div>
+                <p className="eyebrow mb-2">Météo intelligente</p>
+                <h2 className="section-title !mb-0">Conseil météo</h2>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <RefreshWeatherButton plantId={plant.id} />
+                {weatherRefreshing && (
+                  <span className="text-sm subtle-text">Actualisation...</span>
+                )}
+              </div>
+            </div>
+
+            {plant.weather_advice ? (
+              <div className="space-y-2">
+                <p className="text-[1rem] font-semibold text-[#183624]">
+                  {plant.weather_advice}
+                </p>
+
+                {plant.weather_updated_at && (
+                  <p className="subtle-text text-sm">
+                    Mis à jour le {formatFullDate(plant.weather_updated_at)}
+                  </p>
+                )}
+
+                {isWeatherStale(plant.weather_updated_at) && (
+                  <p className="text-sm font-semibold text-amber-700">
+                    Les données météo ne sont plus à jour.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="subtle-text">
+                  Aucun conseil météo disponible pour le moment.
+                </p>
+                <p className="text-sm font-semibold text-amber-700">
+                  Ajoute une ville correcte puis actualise la météo.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="grid-elegant-2 mb-6">
             <div className="field">
               <label className="field-label">Nom</label>
@@ -403,8 +517,12 @@ export default function PlantDetailPage() {
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <button onClick={handleUpdatePlant} className="btn-primary">
-              Sauvegarder les modifications
+            <button
+              onClick={handleUpdatePlant}
+              disabled={savingPlant}
+              className="btn-primary"
+            >
+              {savingPlant ? "Sauvegarde..." : "Sauvegarder les modifications"}
             </button>
 
             <button onClick={handleDeletePlant} className="btn-danger">

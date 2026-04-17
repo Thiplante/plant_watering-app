@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { refreshPlantWeather } from "@/lib/weather/actions";
 
 export default function NewPlantPage() {
   const [name, setName] = useState("");
@@ -44,36 +45,53 @@ export default function NewPlantPage() {
       return;
     }
 
-    setSaving(true);
+    try {
+      setSaving(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      router.replace("/login");
-      return;
-    }
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
 
-    const { error } = await supabase.from("plants").insert({
-      owner_id: user.id,
-      name: name.trim(),
-      watering_frequency_days: frequency,
-      city: city.trim(),
-      exposure,
-      can_be_watered_by_rain: canBeWateredByRain,
-      last_watered_at: new Date().toISOString(),
-    });
+      const { data: newPlant, error } = await supabase
+        .from("plants")
+        .insert({
+          owner_id: user.id,
+          name: name.trim(),
+          watering_frequency_days: frequency,
+          city: city.trim(),
+          exposure,
+          can_be_watered_by_rain: canBeWateredByRain,
+          last_watered_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-    setSaving(false);
+      if (error) {
+        throw error;
+      }
 
-    if (error) {
+      if (!newPlant?.id) {
+        throw new Error("La plante a été créée mais son identifiant est introuvable.");
+      }
+
+      try {
+        await refreshPlantWeather(newPlant.id);
+      } catch (weatherError) {
+        console.error("Erreur météo après création :", weatherError);
+      }
+
+      router.push(`/plants/${newPlant.id}`);
+      router.refresh();
+    } catch (error: any) {
       alert("Erreur lors de la création : " + error.message);
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    router.push("/");
-    router.refresh();
   };
 
   if (loading) {
