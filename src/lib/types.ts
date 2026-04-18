@@ -28,3 +28,28 @@ export type PlantShare = {
   plant_id: string;
   user_email: string;
 };
+
+export type PlantNote = {
+  plant_id: string;
+  repotted_at: string | null;
+  leaf_status: string | null;
+  fertilizer_added_at: string | null;
+  updated_by: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AppNotification = {
+  id: string;
+  user_id: string;
+  plant_id: string | null;
+  notification_key: string;
+  type: string;
+  level: "info" | "success" | "warning" | "danger";
+  title: string;
+  message: string;
+  is_read: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};

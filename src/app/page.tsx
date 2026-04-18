@@ -4,14 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import type { Plant, PlantShare } from "@/lib/types";
+import { buildNotificationDrafts } from "@/lib/plants/notifications";
 import {
   getAdaptiveWateringInsight,
   getDashboardNotifications,
   getHealthInsight,
   getWeatherInsight,
 } from "@/lib/plants/insights";
+import { supabase } from "@/lib/supabase";
+import type { AppNotification, Plant, PlantShare } from "@/lib/types";
 
 type PlantStatus = "unknown" | "overdue" | "today" | "ok";
 
@@ -33,11 +34,13 @@ function toneClasses(tone: string) {
   switch (tone) {
     case "rain":
     case "good":
+    case "success":
       return "bg-emerald-50 text-emerald-800 border border-emerald-100";
     case "heat":
     case "danger":
       return "bg-rose-50 text-rose-800 border border-rose-100";
     case "watch":
+    case "warning":
       return "bg-amber-50 text-amber-800 border border-amber-100";
     default:
       return "bg-slate-50 text-slate-700 border border-slate-100";
@@ -79,10 +82,14 @@ function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
                   )}
 
                   <div className="mb-3 flex flex-wrap gap-2">
-                    <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${toneClasses(weatherInsight.tone)}`}>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-extrabold ${toneClasses(weatherInsight.tone)}`}
+                    >
                       {weatherInsight.label}
                     </span>
-                    <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${toneClasses(healthInsight.tone)}`}>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-extrabold ${toneClasses(healthInsight.tone)}`}
+                    >
                       {healthInsight.label}
                     </span>
                   </div>
@@ -152,8 +159,69 @@ function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
 
 export default function HomePage() {
   const [plants, setPlants] = useState<Plant[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const syncNotifications = useCallback(
+    async (currentUserId: string, currentPlants: Plant[]) => {
+      const drafts = buildNotificationDrafts(currentPlants);
+
+      try {
+        const generatedTypes = [
+          "watering_overdue",
+          "watering_soon",
+          "weather_rain_skip",
+          "weather_heat_watch",
+        ];
+
+        const { data: existingData } = await supabase
+          .from("notifications")
+          .select("id, notification_key")
+          .eq("user_id", currentUserId)
+          .in("type", generatedTypes);
+
+        const existing = (existingData || []) as Pick<
+          AppNotification,
+          "id" | "notification_key"
+        >[];
+        const currentKeys = new Set(drafts.map((draft) => draft.notification_key));
+        const staleIds = existing
+          .filter((notification) => !currentKeys.has(notification.notification_key))
+          .map((notification) => notification.id);
+
+        if (staleIds.length > 0) {
+          await supabase.from("notifications").delete().in("id", staleIds);
+        }
+
+        if (drafts.length > 0) {
+          await supabase.from("notifications").upsert(
+            drafts.map((draft) => ({
+              user_id: currentUserId,
+              is_read: false,
+              ...draft,
+            })),
+            {
+              onConflict: "user_id,notification_key",
+            }
+          );
+        }
+
+        const { data: notificationsData } = await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", currentUserId)
+          .order("created_at", { ascending: false })
+          .limit(8);
+
+        setNotifications((notificationsData || []) as AppNotification[]);
+      } catch {
+        setNotifications([]);
+      }
+    },
+    []
+  );
 
   const fetchPlants = useCallback(async () => {
     const {
@@ -164,6 +232,8 @@ export default function HomePage() {
       router.push("/login");
       return;
     }
+
+    setUserId(user.id);
 
     const { data: myPlantsData } = await supabase
       .from("plants")
@@ -199,9 +269,11 @@ export default function HomePage() {
       uniquePlantsMap.set(plant.id, plant);
     });
 
-    setPlants(Array.from(uniquePlantsMap.values()));
+    const mergedPlants = Array.from(uniquePlantsMap.values());
+    setPlants(mergedPlants);
+    await syncNotifications(user.id, mergedPlants);
     setLoading(false);
-  }, [router]);
+  }, [router, syncNotifications]);
 
   useEffect(() => {
     startTransition(() => {
@@ -229,6 +301,39 @@ export default function HomePage() {
     });
 
     await fetchPlants();
+  };
+
+  const markNotificationRead = async (notificationId: string) => {
+    try {
+      await supabase.from("notifications").update({ is_read: true }).eq("id", notificationId);
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.id === notificationId
+            ? { ...notification, is_read: true }
+            : notification
+        )
+      );
+    } catch {
+      return;
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    if (!userId) return;
+
+    try {
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", userId)
+        .eq("is_read", false);
+
+      setNotifications((current) =>
+        current.map((notification) => ({ ...notification, is_read: true }))
+      );
+    } catch {
+      return;
+    }
   };
 
   const getFriendlyLastLabel = (lastDate: string) => {
@@ -305,7 +410,8 @@ export default function HomePage() {
   const overdue = plants.filter((plant) => getStatus(plant) === "overdue");
   const today = plants.filter((plant) => getStatus(plant) === "today");
   const normal = plants.filter((plant) => getStatus(plant) === "ok");
-  const notifications = getDashboardNotifications(plants);
+  const fallbackNotifications = getDashboardNotifications(plants);
+  const unreadCount = notifications.filter((notification) => !notification.is_read).length;
 
   if (loading) {
     return (
@@ -334,21 +440,57 @@ export default function HomePage() {
               <h2 className="section-title !mb-0">Centre d&apos;attention</h2>
             </div>
 
-            <div className="rounded-full bg-[#edf4ee] px-4 py-2 text-sm font-extrabold text-[#1d3a28]">
-              {plants.length} plantes suivies
+            <div className="flex flex-wrap gap-3">
+              <div className="rounded-full bg-[#edf4ee] px-4 py-2 text-sm font-extrabold text-[#1d3a28]">
+                {plants.length} plantes suivies
+              </div>
+              {notifications.length > 0 && (
+                <button onClick={markAllNotificationsRead} className="btn-secondary">
+                  {unreadCount > 0 ? `Tout lire (${unreadCount})` : "Tout est lu"}
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {notifications.map((message) => (
-              <div
-                key={message}
-                className="rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-white/80 px-5 py-4 text-sm font-semibold text-[#1e3223]"
-              >
-                {message}
-              </div>
-            ))}
-          </div>
+          {notifications.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`rounded-[24px] px-5 py-4 ${toneClasses(notification.level)} ${
+                    notification.is_read ? "opacity-70" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black">{notification.title}</p>
+                      <p className="mt-1 text-sm font-semibold">{notification.message}</p>
+                    </div>
+
+                    {!notification.is_read && (
+                      <button
+                        onClick={() => markNotificationRead(notification.id)}
+                        className="btn-secondary !px-4 !py-2"
+                      >
+                        Lu
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {fallbackNotifications.map((message) => (
+                <div
+                  key={message}
+                  className="rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-white/80 px-5 py-4 text-sm font-semibold text-[#1e3223]"
+                >
+                  {message}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <Section

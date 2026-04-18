@@ -11,7 +11,7 @@ import {
   getWeatherInsight,
 } from "@/lib/plants/insights";
 import { supabase } from "@/lib/supabase";
-import type { Plant, PlantShare, WateringLog } from "@/lib/types";
+import type { Plant, PlantNote, PlantShare, WateringLog } from "@/lib/types";
 
 type PlantForm = {
   name: string;
@@ -21,7 +21,7 @@ type PlantForm = {
   rain: boolean;
 };
 
-type PlantNotes = {
+type PlantNotesForm = {
   repottedAt: string;
   leafStatus: string;
   fertilizerAddedAt: string;
@@ -41,7 +41,7 @@ type PlantUpdatePayload = Pick<
   | "weather_updated_at"
 >;
 
-const EMPTY_NOTES: PlantNotes = {
+const EMPTY_NOTES: PlantNotesForm = {
   repottedAt: "",
   leafStatus: "",
   fertilizerAddedAt: "",
@@ -66,6 +66,16 @@ function toneClasses(tone: string) {
   }
 }
 
+function mapNotes(note: PlantNote | null): PlantNotesForm {
+  if (!note) return EMPTY_NOTES;
+
+  return {
+    repottedAt: note.repotted_at || "",
+    leafStatus: note.leaf_status || "",
+    fertilizerAddedAt: note.fertilizer_added_at || "",
+  };
+}
+
 export default function PlantDetailPage() {
   const params = useParams<{ id: string | string[] }>();
   const plantId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -83,8 +93,9 @@ export default function PlantDetailPage() {
   const [updatingImage, setUpdatingImage] = useState(false);
   const [savingPlant, setSavingPlant] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
+  const [notesAvailable, setNotesAvailable] = useState(true);
   const [weatherRefreshing, setWeatherRefreshing] = useState(false);
-  const [notes, setNotes] = useState<PlantNotes>(EMPTY_NOTES);
+  const [notes, setNotes] = useState<PlantNotesForm>(EMPTY_NOTES);
 
   const [form, setForm] = useState<PlantForm>({
     name: "",
@@ -113,16 +124,21 @@ export default function PlantDetailPage() {
 
     setLoading(true);
 
-    const [{ data: plantDataRaw }, { data: historyDataRaw }, { data: sharesDataRaw }] =
-      await Promise.all([
-        supabase.from("plants").select("*").eq("id", plantId).single(),
-        supabase
-          .from("watering_logs")
-          .select("*")
-          .eq("plant_id", plantId)
-          .order("watered_at", { ascending: false }),
-        supabase.from("plant_shares").select("plant_id, user_email").eq("plant_id", plantId),
-      ]);
+    const [
+      { data: plantDataRaw },
+      { data: historyDataRaw },
+      { data: sharesDataRaw },
+      notesResult,
+    ] = await Promise.all([
+      supabase.from("plants").select("*").eq("id", plantId).single(),
+      supabase
+        .from("watering_logs")
+        .select("*")
+        .eq("plant_id", plantId)
+        .order("watered_at", { ascending: false }),
+      supabase.from("plant_shares").select("plant_id, user_email").eq("plant_id", plantId),
+      supabase.from("plant_notes").select("*").eq("plant_id", plantId).maybeSingle(),
+    ]);
 
     const plantData = plantDataRaw as Plant | null;
     const historyData = (historyDataRaw || []) as WateringLog[];
@@ -143,6 +159,15 @@ export default function PlantDetailPage() {
       frequency: plantData.watering_frequency_days || 3,
       rain: Boolean(plantData.can_be_watered_by_rain),
     });
+
+    if (notesResult.error) {
+      setNotesAvailable(false);
+      setNotes(EMPTY_NOTES);
+    } else {
+      setNotesAvailable(true);
+      setNotes(mapNotes((notesResult.data || null) as PlantNote | null));
+    }
+
     setLoading(false);
   }, [plantId, router]);
 
@@ -151,33 +176,37 @@ export default function PlantDetailPage() {
     void loadData();
   }, [plantId, loadData]);
 
-  useEffect(() => {
-    if (!plantId || typeof window === "undefined") return;
-
-    const saved = window.localStorage.getItem(`plant-notes:${plantId}`);
-    if (!saved) {
-      setNotes(EMPTY_NOTES);
-      return;
-    }
+  const saveNotes = async () => {
+    if (!plantId || !notesAvailable) return;
 
     try {
-      const parsed = JSON.parse(saved) as PlantNotes;
-      setNotes({
-        repottedAt: parsed.repottedAt || "",
-        leafStatus: parsed.leafStatus || "",
-        fertilizerAddedAt: parsed.fertilizerAddedAt || "",
-      });
-    } catch {
-      setNotes(EMPTY_NOTES);
+      setSavingNotes(true);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const { error } = await supabase.from("plant_notes").upsert(
+        {
+          plant_id: plantId,
+          repotted_at: notes.repottedAt || null,
+          leaf_status: notes.leafStatus.trim() || null,
+          fertilizer_added_at: notes.fertilizerAddedAt || null,
+          updated_by: user?.id ?? null,
+        },
+        { onConflict: "plant_id" }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      await loadData();
+    } catch (error: unknown) {
+      alert(getErrorMessage(error, "Impossible de sauvegarder les notes"));
+    } finally {
+      setSavingNotes(false);
     }
-  }, [plantId]);
-
-  const saveNotes = async () => {
-    if (!plantId || typeof window === "undefined") return;
-
-    setSavingNotes(true);
-    window.localStorage.setItem(`plant-notes:${plantId}`, JSON.stringify(notes));
-    setTimeout(() => setSavingNotes(false), 250);
   };
 
   const refreshWeather = async () => {
@@ -701,50 +730,61 @@ export default function PlantDetailPage() {
           <p className="eyebrow mb-3">Notes</p>
           <h2 className="section-title mb-5">Suivi pratique de la plante</h2>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="field">
-              <label className="field-label">Rempotee le</label>
-              <input
-                type="date"
-                value={notes.repottedAt}
-                onChange={(event) =>
-                  setNotes({ ...notes, repottedAt: event.target.value })
-                }
-                className="input-elegant"
-              />
+          {notesAvailable ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="field">
+                  <label className="field-label">Rempotee le</label>
+                  <input
+                    type="date"
+                    value={notes.repottedAt}
+                    onChange={(event) =>
+                      setNotes({ ...notes, repottedAt: event.target.value })
+                    }
+                    className="input-elegant"
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="field-label">Engrais ajoute le</label>
+                  <input
+                    type="date"
+                    value={notes.fertilizerAddedAt}
+                    onChange={(event) =>
+                      setNotes({ ...notes, fertilizerAddedAt: event.target.value })
+                    }
+                    className="input-elegant"
+                  />
+                </div>
+              </div>
+
+              <div className="field mt-4">
+                <label className="field-label">Observation feuilles</label>
+                <textarea
+                  value={notes.leafStatus}
+                  onChange={(event) =>
+                    setNotes({ ...notes, leafStatus: event.target.value })
+                  }
+                  className="textarea-elegant"
+                  placeholder="Ex: feuilles jaunes, nouvelles pousses, terre tres seche..."
+                />
+              </div>
+
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <p className="text-sm subtle-text">
+                  Ces notes sont maintenant destinees a etre stockees dans Supabase.
+                </p>
+                <button onClick={saveNotes} className="btn-secondary">
+                  {savingNotes ? "Sauvegarde..." : "Enregistrer les notes"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-[24px] border border-amber-100 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-900">
+              Les notes ne sont pas encore disponibles. Applique la migration SQL
+              ajoutee dans le repo pour activer cette fonction.
             </div>
-
-            <div className="field">
-              <label className="field-label">Engrais ajoute le</label>
-              <input
-                type="date"
-                value={notes.fertilizerAddedAt}
-                onChange={(event) =>
-                  setNotes({ ...notes, fertilizerAddedAt: event.target.value })
-                }
-                className="input-elegant"
-              />
-            </div>
-          </div>
-
-          <div className="field mt-4">
-            <label className="field-label">Observation feuilles</label>
-            <textarea
-              value={notes.leafStatus}
-              onChange={(event) => setNotes({ ...notes, leafStatus: event.target.value })}
-              className="textarea-elegant"
-              placeholder="Ex: feuilles jaunes, nouvelles pousses, terre tres seche..."
-            />
-          </div>
-
-          <div className="mt-5 flex items-center justify-between gap-3">
-            <p className="text-sm subtle-text">
-              Notes sauvegardees localement sur cet appareil pour l&apos;instant.
-            </p>
-            <button onClick={saveNotes} className="btn-secondary">
-              {savingNotes ? "Sauvegarde..." : "Enregistrer les notes"}
-            </button>
-          </div>
+          )}
         </section>
 
         <section className="soft-card mb-6 p-6 md:p-8">
@@ -771,10 +811,7 @@ export default function PlantDetailPage() {
               </div>
             ) : (
               sharedWith.map((share) => (
-                <div
-                  key={share.user_email}
-                  className="history-item"
-                >
+                <div key={share.user_email} className="history-item">
                   <div>
                     <p className="font-extrabold text-[#183624]">{share.user_email}</p>
                     <p className="history-date">Acces collaboratif actif</p>
