@@ -326,7 +326,7 @@ export default function HomePage() {
     } catch {
       setMessage({
         type: "error",
-        text: "Impossible d'enregistrer cet arrosage pour le moment.",
+        text: "Impossible d'enregistrer cet arrosage pour le moment. Verifie ta connexion puis reessaie.",
       });
     }
   };
@@ -369,7 +369,7 @@ export default function HomePage() {
       } catch {
         setMessage({
           type: "error",
-          text: "Impossible d'executer cette action pour le moment.",
+          text: "Impossible d'executer cette action pour le moment. Ouvre la fiche plante si le probleme persiste.",
         });
       }
 

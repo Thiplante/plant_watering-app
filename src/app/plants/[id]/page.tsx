@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import ConfirmModal from "@/components/ConfirmModal";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
 import {
   getAdaptiveWateringInsight,
@@ -51,6 +52,13 @@ type PageMessage = {
   type: "success" | "error";
   text: string;
 };
+
+type ConfirmState =
+  | { kind: "delete-plant" }
+  | { kind: "remove-image" }
+  | { kind: "delete-log"; logId: string }
+  | { kind: "remove-share"; email: string }
+  | null;
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -107,6 +115,8 @@ export default function PlantDetailPage() {
   const [weatherRefreshing, setWeatherRefreshing] = useState(false);
   const [notes, setNotes] = useState<PlantNotesForm>(EMPTY_NOTES);
   const [message, setMessage] = useState<PageMessage | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   const [form, setForm] = useState<PlantForm>({
     name: "",
@@ -325,12 +335,19 @@ export default function PlantDetailPage() {
     if (!plantId) return;
 
     setMessage(null);
-    await supabase.from("plants").update({ image_url: null }).eq("id", plantId);
-    await loadData();
-    setMessage({
-      type: "success",
-      text: "Photo retiree.",
-    });
+    try {
+      await supabase.from("plants").update({ image_url: null }).eq("id", plantId);
+      await loadData();
+      setMessage({
+        type: "success",
+        text: "Photo retiree.",
+      });
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Impossible de retirer la photo pour le moment. Reessaie dans quelques instants.",
+      });
+    }
   };
 
   const handleUpdatePlant = async () => {
@@ -411,43 +428,64 @@ export default function PlantDetailPage() {
   };
 
   const handleDeletePlant = async () => {
-    if (!plantId || !confirm("Supprimer cette plante ?")) return;
+    if (!plantId) return;
 
-    await supabase.from("plants").delete().eq("id", plantId);
-    router.push("/");
+    try {
+      await supabase.from("plants").delete().eq("id", plantId);
+      router.push("/");
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Impossible de supprimer cette plante pour le moment. Reessaie plus tard.",
+      });
+    }
   };
 
   const handleWater = async () => {
     if (!plantId) return;
 
     setMessage(null);
-    const now = new Date().toISOString();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const now = new Date().toISOString();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
-    await supabase.from("watering_logs").insert({
-      plant_id: plantId,
-      watered_at: now,
-      user_id: user?.id,
-    });
+      await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
+      await supabase.from("watering_logs").insert({
+        plant_id: plantId,
+        watered_at: now,
+        user_id: user?.id,
+      });
 
-    await loadData();
-    setMessage({
-      type: "success",
-      text: "Arrosage enregistre. Le prochain rappel repart de maintenant.",
-    });
+      await loadData();
+      setMessage({
+        type: "success",
+        text: "Arrosage enregistre. Le prochain rappel repart de maintenant.",
+      });
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Impossible d'enregistrer l'arrosage. Verifie ta connexion puis reessaie.",
+      });
+    }
   };
 
   const handleDeleteLog = async (logId: string) => {
     setMessage(null);
-    await supabase.from("watering_logs").delete().eq("id", logId);
-    await loadData();
-    setMessage({
-      type: "success",
-      text: "Entree d'historique supprimee.",
-    });
+    try {
+      await supabase.from("watering_logs").delete().eq("id", logId);
+      await loadData();
+      setMessage({
+        type: "success",
+        text: "Entree d'historique supprimee.",
+      });
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Impossible de supprimer cette entree d'historique pour le moment.",
+      });
+    }
   };
 
   const startEditLog = (log: WateringLog) => {
@@ -464,32 +502,39 @@ export default function PlantDetailPage() {
     if (!editingLogId || !editingLogDate || !plantId) return;
 
     setMessage(null);
-    const isoDate = new Date(editingLogDate).toISOString();
+    try {
+      const isoDate = new Date(editingLogDate).toISOString();
 
-    await supabase
-      .from("watering_logs")
-      .update({ watered_at: isoDate })
-      .eq("id", editingLogId);
+      await supabase
+        .from("watering_logs")
+        .update({ watered_at: isoDate })
+        .eq("id", editingLogId);
 
-    if (history.length > 0) {
-      const sortedDates = history
-        .map((log) => (log.id === editingLogId ? isoDate : log.watered_at))
-        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      if (history.length > 0) {
+        const sortedDates = history
+          .map((log) => (log.id === editingLogId ? isoDate : log.watered_at))
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
-      if (sortedDates[0]) {
-        await supabase
-          .from("plants")
-          .update({ last_watered_at: sortedDates[0] })
-          .eq("id", plantId);
+        if (sortedDates[0]) {
+          await supabase
+            .from("plants")
+            .update({ last_watered_at: sortedDates[0] })
+            .eq("id", plantId);
+        }
       }
-    }
 
-    cancelEditLog();
-    await loadData();
-    setMessage({
-      type: "success",
-      text: "Historique mis a jour.",
-    });
+      cancelEditLog();
+      await loadData();
+      setMessage({
+        type: "success",
+        text: "Historique mis a jour.",
+      });
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Impossible de mettre a jour l'historique. Reessaie dans un instant.",
+      });
+    }
   };
 
   const handleShare = async () => {
@@ -531,17 +576,89 @@ export default function PlantDetailPage() {
     if (!plantId) return;
 
     setMessage(null);
-    await supabase
-      .from("plant_shares")
-      .delete()
-      .eq("plant_id", plantId)
-      .eq("user_email", email);
+    try {
+      await supabase
+        .from("plant_shares")
+        .delete()
+        .eq("plant_id", plantId)
+        .eq("user_email", email);
 
-    await loadData();
-    setMessage({
-      type: "success",
-      text: "Acces retire.",
-    });
+      await loadData();
+      setMessage({
+        type: "success",
+        text: "Acces retire.",
+      });
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Impossible de retirer cet acces pour le moment.",
+      });
+    }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmState) return;
+
+    try {
+      setConfirmBusy(true);
+
+      if (confirmState.kind === "delete-plant") {
+        await handleDeletePlant();
+      }
+
+      if (confirmState.kind === "remove-image") {
+        await removeImage();
+      }
+
+      if (confirmState.kind === "delete-log") {
+        await handleDeleteLog(confirmState.logId);
+      }
+
+      if (confirmState.kind === "remove-share") {
+        await handleRemoveShare(confirmState.email);
+      }
+    } finally {
+      setConfirmBusy(false);
+      setConfirmState(null);
+    }
+  };
+
+  const getConfirmContent = () => {
+    if (!confirmState) return null;
+
+    if (confirmState.kind === "delete-plant") {
+      return {
+        title: "Supprimer cette plante ?",
+        description:
+          "La fiche, l'historique et les informations associees seront retires. Cette action est definitive.",
+        confirmLabel: "Supprimer la plante",
+      };
+    }
+
+    if (confirmState.kind === "remove-image") {
+      return {
+        title: "Retirer la photo ?",
+        description:
+          "La plante restera dans ton suivi, mais elle n'aura plus d'image pour l'identifier rapidement.",
+        confirmLabel: "Retirer la photo",
+      };
+    }
+
+    if (confirmState.kind === "delete-log") {
+      return {
+        title: "Supprimer cet arrosage ?",
+        description:
+          "Cette entree disparaitra de l'historique et peut modifier le prochain rappel d'arrosage.",
+        confirmLabel: "Supprimer l'entree",
+      };
+    }
+
+    return {
+      title: "Retirer cet acces ?",
+      description:
+        "Cette personne ne pourra plus consulter cette plante tant que tu ne la repartages pas.",
+      confirmLabel: "Retirer l'acces",
+    };
   };
 
   const toDatetimeLocalValue = (dateString: string) => {
@@ -605,6 +722,7 @@ export default function PlantDetailPage() {
       ? ` a ${adaptiveInsight.maxDays}`
       : ""
   } jours`;
+  const confirmContent = getConfirmContent();
 
   return (
     <main className="page-shell">
@@ -717,7 +835,10 @@ export default function PlantDetailPage() {
                 </button>
 
                 {plant.image_url && (
-                  <button onClick={removeImage} className="btn-secondary">
+                  <button
+                    onClick={() => setConfirmState({ kind: "remove-image" })}
+                    className="btn-secondary"
+                  >
                     Retirer la photo
                   </button>
                 )}
@@ -864,7 +985,10 @@ export default function PlantDetailPage() {
               {savingPlant ? "Sauvegarde..." : "Enregistrer les reglages"}
             </button>
 
-            <button onClick={handleDeletePlant} className="btn-danger">
+            <button
+              onClick={() => setConfirmState({ kind: "delete-plant" })}
+              className="btn-danger"
+            >
               Supprimer la plante
             </button>
           </div>
@@ -962,7 +1086,9 @@ export default function PlantDetailPage() {
                   </div>
 
                   <button
-                    onClick={() => handleRemoveShare(share.user_email)}
+                    onClick={() =>
+                      setConfirmState({ kind: "remove-share", email: share.user_email })
+                    }
                     className="btn-secondary"
                   >
                     Retirer l&apos;acces
@@ -1021,7 +1147,9 @@ export default function PlantDetailPage() {
                           Modifier
                         </button>
                         <button
-                          onClick={() => handleDeleteLog(log.id)}
+                          onClick={() =>
+                            setConfirmState({ kind: "delete-log", logId: log.id })
+                          }
                           className="btn-secondary"
                           title="Supprimer"
                         >
@@ -1036,6 +1164,18 @@ export default function PlantDetailPage() {
           </div>
         </section>
       </div>
+
+      {confirmContent && (
+        <ConfirmModal
+          open={Boolean(confirmState)}
+          title={confirmContent.title}
+          description={confirmContent.description}
+          confirmLabel={confirmContent.confirmLabel}
+          busy={confirmBusy}
+          onCancel={() => setConfirmState(null)}
+          onConfirm={() => void handleConfirmAction()}
+        />
+      )}
     </main>
   );
 }
