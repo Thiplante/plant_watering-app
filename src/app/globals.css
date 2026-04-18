@@ -81,7 +81,7 @@ textarea {
 /* Layout helpers */
 .page-shell {
   min-height: 100vh;
-  padding: 24px;
+  padding: 18px;
 }
 
 @media (min-width: 768px) {
@@ -98,6 +98,28 @@ textarea {
 .page-container-narrow {
   max-width: 860px;
   margin: 0 auto;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(248, 251, 247, 0.84);
+  border-bottom: 1px solid rgba(35, 75, 52, 0.06);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.app-header-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px 18px;
+}
+
+@media (min-width: 768px) {
+  .app-header-shell {
+    padding: 16px 40px;
+  }
 }
 
 /* Elegant glass cards */
@@ -172,6 +194,15 @@ textarea {
 
 .btn-primary:active {
   transform: translateY(0);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .btn-secondary {
@@ -440,6 +471,31 @@ textarea {
   padding: 56px 24px;
   text-align: center;
   color: var(--muted);
+}
+
+.feedback-banner {
+  border-radius: 24px;
+  padding: 14px 16px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.feedback-success {
+  background: #edf9f0;
+  border: 1px solid #cfead5;
+  color: #1d5f2e;
+}
+
+.feedback-error {
+  background: #fff1f1;
+  border: 1px solid #f2caca;
+  color: #9c3333;
+}
+
+.feedback-info {
+  background: #f4f8f4;
+  border: 1px solid rgba(35, 75, 52, 0.08);
+  color: #365042;
 }
 
 .grid-elegant {

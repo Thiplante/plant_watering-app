@@ -1,56 +1,78 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function Header() {
+  const pathname = usePathname();
+  const [loggingOut, setLoggingOut] = useState(false);
+
   const handleLogout = async () => {
+    setLoggingOut(true);
     await supabase.auth.signOut();
     window.location.href = "/login";
   };
 
   return (
-    <header className="border-b border-black/5 bg-white/80 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
+    <header className="app-header">
+      <div className="app-header-shell">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between gap-4">
             <Link
               href="/"
-              className="text-lg font-bold text-gray-900 hover:text-green-700"
+              className="text-lg font-black tracking-tight text-[#163321] transition hover:text-[#28563c]"
             >
-              🌱 Plant Watering
+              Plant Watering
             </Link>
 
-            <nav className="hidden gap-4 sm:flex">
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="btn-secondary md:hidden"
+            >
+              {loggingOut ? "Deconnexion..." : "Quitter"}
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+            <nav className="grid grid-cols-2 gap-2 sm:flex">
               <Link
                 href="/"
-                className="text-sm font-medium text-gray-600 hover:text-green-700"
+                className={`rounded-full px-4 py-2 text-sm font-extrabold transition ${
+                  pathname === "/"
+                    ? "bg-[#edf4ee] text-[#183624]"
+                    : "text-[#5e7061] hover:bg-white/80 hover:text-[#28563c]"
+                }`}
               >
-                Accueil
+                Dashboard
               </Link>
               <Link
                 href="/plants/new"
-                className="text-sm font-medium text-gray-600 hover:text-green-700"
+                className={`rounded-full px-4 py-2 text-sm font-extrabold transition ${
+                  pathname === "/plants/new"
+                    ? "bg-[#edf4ee] text-[#183624]"
+                    : "text-[#5e7061] hover:bg-white/80 hover:text-[#28563c]"
+                }`}
               >
                 Ajouter une plante
               </Link>
             </nav>
-          </div>
 
-          <button
-            onClick={handleLogout}
-            className="rounded-2xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black"
-          >
-            Déconnexion
-          </button>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="hidden md:inline-flex btn-secondary"
+            >
+              {loggingOut ? "Deconnexion..." : "Se deconnecter"}
+            </button>
+          </div>
         </div>
 
-        <div className="sm:hidden">
-          <Link
-            href="/plants/new"
-            className="inline-flex w-full items-center justify-center rounded-2xl bg-green-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-green-700"
-          >
-            + Ajouter une plante
+        <div className="mt-3 md:hidden">
+          <Link href="/plants/new" className="btn-primary w-full">
+            Ajouter une plante rapidement
           </Link>
         </div>
       </div>

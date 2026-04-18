@@ -6,9 +6,15 @@ import { refreshPlantWeather } from "@/lib/weather/actions";
 
 type Props = {
   plantId: string;
+  onSuccess?: () => void;
+  onError?: (message: string) => void;
 };
 
-export default function RefreshWeatherButton({ plantId }: Props) {
+export default function RefreshWeatherButton({
+  plantId,
+  onSuccess,
+  onError,
+}: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,11 +25,13 @@ export default function RefreshWeatherButton({ plantId }: Props) {
       setError(null);
 
       await refreshPlantWeather(plantId);
+      onSuccess?.();
       router.refresh();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Erreur lors du rafraichissement meteo"
-      );
+      const message =
+        err instanceof Error ? err.message : "Erreur lors du rafraichissement meteo";
+      setError(message);
+      onError?.(message);
     } finally {
       setLoading(false);
     }

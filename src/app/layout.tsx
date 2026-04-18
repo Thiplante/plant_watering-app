@@ -3,8 +3,8 @@ import "./globals.css";
 import HeaderWrapper from "@/components/HeaderWrapper";
 
 export const metadata: Metadata = {
-  title: "Plant Watering App",
-  description: "Suivi d’arrosage des plantes",
+  title: "Plant Watering",
+  description: "Suivi d'arrosage des plantes avec rappels et meteo",
 };
 
 export default function RootLayout({

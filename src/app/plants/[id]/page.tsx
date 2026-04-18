@@ -497,6 +497,15 @@ export default function PlantDetailPage() {
 
     const normalizedEmail = shareEmail.trim().toLowerCase();
     setMessage(null);
+
+    if (!normalizedEmail.includes("@")) {
+      setMessage({
+        type: "error",
+        text: "Ajoute une adresse email valide pour partager cette plante.",
+      });
+      return;
+    }
+
     const { error } = await supabase.from("plant_shares").insert({
       plant_id: plantId,
       user_email: normalizedEmail,
@@ -724,7 +733,21 @@ export default function PlantDetailPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                <RefreshWeatherButton plantId={plant.id} />
+                <RefreshWeatherButton
+                  plantId={plant.id}
+                  onSuccess={() =>
+                    setMessage({
+                      type: "success",
+                      text: "Meteo actualisee. Les conseils affichent maintenant les dernieres donnees.",
+                    })
+                  }
+                  onError={(errorMessage) =>
+                    setMessage({
+                      type: "error",
+                      text: errorMessage,
+                    })
+                  }
+                />
                 {weatherRefreshing && (
                   <span className="text-sm subtle-text">Actualisation...</span>
                 )}
@@ -802,6 +825,7 @@ export default function PlantDetailPage() {
               <input
                 type="number"
                 min={1}
+                max={30}
                 value={form.frequency}
                 onChange={(event) =>
                   setForm({ ...form, frequency: Number(event.target.value) })

@@ -23,6 +23,11 @@ type PlantDateInfo = {
   isOverdue: boolean;
 };
 
+type HomeMessage = {
+  type: "success" | "error";
+  text: string;
+};
+
 type SectionProps = {
   title: string;
   subtitle: string;
@@ -172,6 +177,7 @@ export default function HomePage() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<HomeMessage | null>(null);
   const router = useRouter();
 
   const syncNotifications = useCallback(
@@ -297,20 +303,91 @@ export default function HomePage() {
   ) => {
     event.preventDefault();
     setLoading(true);
+    setMessage(null);
 
-    const now = new Date().toISOString();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const now = new Date().toISOString();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    await supabase.from("plants").update({ last_watered_at: now }).eq("id", plant.id);
-    await supabase.from("watering_logs").insert({
-      plant_id: plant.id,
-      watered_at: now,
-      user_id: user?.id,
-    });
+      await supabase.from("plants").update({ last_watered_at: now }).eq("id", plant.id);
+      await supabase.from("watering_logs").insert({
+        plant_id: plant.id,
+        watered_at: now,
+        user_id: user?.id,
+      });
 
-    await fetchPlants();
+      await fetchPlants();
+      setMessage({
+        type: "success",
+        text: `${plant.name} est maintenant marquee comme arrosee.`,
+      });
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Impossible d'enregistrer cet arrosage pour le moment.",
+      });
+    }
+  };
+
+  const handleNotificationAction = async (notification: AppNotification) => {
+    const relatedPlant = plants.find((plant) => plant.id === notification.plant_id);
+
+    if (!relatedPlant) {
+      if (notification.plant_id) {
+        router.push(`/plants/${notification.plant_id}`);
+      }
+      return;
+    }
+
+    if (
+      notification.type === "watering_overdue" ||
+      notification.type === "watering_soon"
+    ) {
+      setLoading(true);
+      setMessage(null);
+
+      try {
+        const now = new Date().toISOString();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        await supabase.from("plants").update({ last_watered_at: now }).eq("id", relatedPlant.id);
+        await supabase.from("watering_logs").insert({
+          plant_id: relatedPlant.id,
+          watered_at: now,
+          user_id: user?.id,
+        });
+        await markNotificationRead(notification.id);
+        await fetchPlants();
+        setMessage({
+          type: "success",
+          text: `${relatedPlant.name} a ete marquee comme arrosee depuis les notifications.`,
+        });
+      } catch {
+        setMessage({
+          type: "error",
+          text: "Impossible d'executer cette action pour le moment.",
+        });
+      }
+
+      return;
+    }
+
+    router.push(`/plants/${relatedPlant.id}`);
+  };
+
+  const getNotificationActionLabel = (notification: AppNotification) => {
+    if (
+      notification.type === "watering_overdue" ||
+      notification.type === "watering_soon"
+    ) {
+      return "Marquer arrosee";
+    }
+
+    return "Voir la plante";
   };
 
   const markNotificationRead = async (notificationId: string) => {
@@ -486,6 +563,16 @@ export default function HomePage() {
           </div>
         </section>
 
+        {message && (
+          <div
+            className={`mb-6 feedback-banner ${
+              message.type === "success" ? "feedback-success" : "feedback-error"
+            }`}
+          >
+            {message.text}
+          </div>
+        )}
+
         <section className="glass-card mb-10 p-6 md:p-8">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -519,13 +606,22 @@ export default function HomePage() {
                       <p className="text-sm font-black">{notification.title}</p>
                       <p className="mt-1 text-sm font-semibold">{notification.message}</p>
                     </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      onClick={() => void handleNotificationAction(notification)}
+                      className="btn-primary !px-4 !py-2"
+                    >
+                      {getNotificationActionLabel(notification)}
+                    </button>
 
                     {!notification.is_read && (
                       <button
-                        onClick={() => markNotificationRead(notification.id)}
+                        onClick={() => void markNotificationRead(notification.id)}
                         className="btn-secondary !px-4 !py-2"
                       >
-                        Lu
+                        Marquer comme lu
                       </button>
                     )}
                   </div>

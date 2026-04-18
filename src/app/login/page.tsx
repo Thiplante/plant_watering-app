@@ -1,80 +1,119 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
 import { supabase } from "@/lib/supabase";
+
+type FormMessage = {
+  type: "error" | "success";
+  text: string;
+};
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<FormMessage | null>(null);
+  const router = useRouter();
 
-  const handleLogin = async () => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage(null);
 
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("Connecte !");
-      window.location.href = "/";
+    if (!email.trim() || !password.trim()) {
+      setMessage({
+        type: "error",
+        text: "Renseigne ton email et ton mot de passe pour te connecter.",
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (error) {
+        setMessage({ type: "error", text: error.message });
+        return;
+      }
+
+      setMessage({
+        type: "success",
+        text: "Connexion reussie. Redirection vers ton dashboard...",
+      });
+      router.replace("/");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-      <div className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
-        <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-8">
-          <div className="mb-6 text-center">
-            <p className="text-sm font-medium text-green-700">Bon retour</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
+    <main className="page-shell">
+      <div className="page-container-narrow flex min-h-[calc(100vh-36px)] items-center justify-center">
+        <div className="glass-card w-full max-w-md p-6 sm:p-8">
+          <div className="mb-8 text-center">
+            <p className="eyebrow mb-3">Bon retour</p>
+            <h1 className="hero-title" style={{ fontSize: "clamp(2rem, 8vw, 3rem)" }}>
               Se connecter
             </h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Accede a tes plantes et a ton suivi d&apos;arrosage.
+            <p className="subtle-text mt-3 text-sm">
+              Retrouve tes plantes, tes rappels et les conseils meteo en quelques secondes.
             </p>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+          <form onSubmit={handleLogin} className="space-y-4" noValidate>
+            <div className="field">
+              <label htmlFor="email" className="field-label">
                 Email
               </label>
               <input
+                id="email"
                 type="email"
                 placeholder="ton@email.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 focus:bg-white"
+                onChange={(event) => setEmail(event.target.value)}
+                className="input-elegant"
               />
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+            <div className="field">
+              <label htmlFor="password" className="field-label">
                 Mot de passe
               </label>
               <input
+                id="password"
                 type="password"
-                placeholder="mot de passe"
+                placeholder="Ton mot de passe"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 focus:bg-white"
+                onChange={(event) => setPassword(event.target.value)}
+                className="input-elegant"
               />
             </div>
 
-            <button
-              onClick={handleLogin}
-              className="w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black"
-            >
-              Se connecter
-            </button>
-          </div>
+            {message && (
+              <div
+                className={`feedback-banner ${
+                  message.type === "success" ? "feedback-success" : "feedback-error"
+                }`}
+              >
+                {message.text}
+              </div>
+            )}
 
-          <p className="mt-6 text-center text-sm text-gray-600">
+            <button type="submit" disabled={loading} className="btn-primary w-full">
+              {loading ? "Connexion..." : "Acceder a mon dashboard"}
+            </button>
+          </form>
+
+          <p className="subtle-text mt-6 text-center text-sm">
             Pas encore de compte ?{" "}
-            <Link href="/signup" className="font-semibold text-green-700 hover:text-green-800">
-              Creer un compte
+            <Link href="/signup" className="font-extrabold text-[#28563c] hover:text-[#183624]">
+              Creer un compte simplement
             </Link>
           </p>
         </div>

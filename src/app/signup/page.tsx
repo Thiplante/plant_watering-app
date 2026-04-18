@@ -1,19 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
+type FormMessage = {
+  type: "error" | "success";
+  text: string;
+};
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<FormMessage | null>(null);
   const router = useRouter();
 
-  const handleSignup = async () => {
+  const handleSignup = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage(null);
+
     if (!email.trim() || !password.trim()) {
-      alert("Email et mot de passe obligatoires.");
+      setMessage({
+        type: "error",
+        text: "Ajoute un email et un mot de passe pour creer le compte.",
+      });
+      return;
+    }
+
+    if (password.trim().length < 6) {
+      setMessage({
+        type: "error",
+        text: "Choisis un mot de passe d'au moins 6 caracteres.",
+      });
       return;
     }
 
@@ -25,7 +45,7 @@ export default function SignupPage() {
     });
 
     if (error) {
-      alert(error.message);
+      setMessage({ type: "error", text: error.message });
       setLoading(false);
       return;
     }
@@ -40,52 +60,80 @@ export default function SignupPage() {
     }
 
     setLoading(false);
-    alert("Compte cree ! Connecte-toi maintenant.");
+    setMessage({
+      type: "success",
+      text: "Compte cree. Tu peux maintenant te connecter.",
+    });
     router.push("/login");
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-green-50 p-6">
-      <div className="w-full max-w-md rounded-[40px] border border-green-100 bg-white p-10 shadow-2xl">
-        <h1 className="mb-2 text-4xl font-black tracking-tighter text-gray-900">
-          Bienvenue !
-        </h1>
-        <p className="mb-8 font-medium text-gray-500">
-          Cree ton compte pour sauver tes plantes.
-        </p>
+    <main className="page-shell">
+      <div className="page-container-narrow flex min-h-[calc(100vh-36px)] items-center justify-center">
+        <div className="glass-card w-full max-w-md p-8 sm:p-10">
+          <p className="eyebrow mb-3">Bienvenue</p>
+          <h1 className="hero-title" style={{ fontSize: "clamp(2rem, 8vw, 3rem)" }}>
+            Creer un compte
+          </h1>
+          <p className="subtle-text mb-8 mt-3 text-sm">
+            Quelques secondes suffisent pour commencer ton suivi d&apos;arrosage.
+          </p>
 
-        <div className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-2xl border-none bg-gray-50 px-5 py-4 outline-none focus:ring-2 focus:ring-green-500"
-          />
+          <form onSubmit={handleSignup} className="space-y-4" noValidate>
+            <div className="field">
+              <label htmlFor="signup-email" className="field-label">
+                Email
+              </label>
+              <input
+                id="signup-email"
+                type="email"
+                placeholder="ton@email.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="input-elegant"
+              />
+            </div>
 
-          <input
-            type="password"
-            placeholder="Mot de passe"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-2xl border-none bg-gray-50 px-5 py-4 outline-none focus:ring-2 focus:ring-green-500"
-          />
+            <div className="field">
+              <label htmlFor="signup-password" className="field-label">
+                Mot de passe
+              </label>
+              <input
+                id="signup-password"
+                type="password"
+                placeholder="Au moins 6 caracteres"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="input-elegant"
+              />
+            </div>
 
-          <button
-            onClick={handleSignup}
-            disabled={loading}
-            className="w-full rounded-2xl bg-green-600 py-4 font-black text-white transition hover:bg-green-700 disabled:opacity-50"
-          >
-            {loading ? "CREATION..." : "C'EST PARTI !"}
-          </button>
+            <div className="feedback-banner feedback-info">
+              Ton mot de passe doit contenir au moins 6 caracteres pour eviter les erreurs de creation.
+            </div>
+
+            {message && (
+              <div
+                className={`feedback-banner ${
+                  message.type === "success" ? "feedback-success" : "feedback-error"
+                }`}
+              >
+                {message.text}
+              </div>
+            )}
+
+            <button type="submit" disabled={loading} className="btn-primary w-full">
+              {loading ? "Creation..." : "Creer mon compte"}
+            </button>
+          </form>
+
+          <p className="subtle-text mt-8 text-center text-sm font-bold">
+            Deja un compte ?{" "}
+            <Link href="/login" className="font-extrabold text-[#28563c] hover:text-[#183624]">
+              Se connecter
+            </Link>
+          </p>
         </div>
-
-        <p className="mt-8 text-center text-sm font-bold text-gray-400">
-          Deja un compte ?{" "}
-          <Link href="/login" className="text-green-600 underline">
-            Se connecter
-          </Link>
-        </p>
       </div>
     </main>
   );
