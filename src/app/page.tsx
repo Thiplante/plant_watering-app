@@ -25,6 +25,7 @@ type PlantDateInfo = {
 
 type SectionProps = {
   title: string;
+  subtitle: string;
   plants: Plant[];
   onQuickWater: (event: React.MouseEvent<HTMLButtonElement>, plant: Plant) => void;
   getDates: (plant: Plant) => PlantDateInfo;
@@ -47,15 +48,20 @@ function toneClasses(tone: string) {
   }
 }
 
-function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
+function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionProps) {
   return (
     <section className="mb-10">
-      <h2 className="section-title mb-6">
-        {title} ({plants.length})
-      </h2>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="section-title !mb-0">
+            {title} ({plants.length})
+          </h2>
+          <p className="subtle-text mt-2 text-sm">{subtitle}</p>
+        </div>
+      </div>
 
       {plants.length === 0 ? (
-        <div className="soft-card center-empty">Rien ici</div>
+        <div className="soft-card center-empty">Aucune plante dans cette categorie.</div>
       ) : (
         <div className="grid-elegant grid-elegant-3">
           {plants.map((plant) => {
@@ -123,11 +129,15 @@ function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
                         {dates.label}
                       </span>
                     </div>
+                    <div className="status-card">
+                      <span className="status-label">Date cible</span>
+                      <span className="status-value">{dates.next}</span>
+                    </div>
                   </div>
 
                   <div className="mb-4 rounded-[24px] bg-[#f7faf7] px-4 py-4">
                     <p className="mb-1 text-xs font-black uppercase tracking-[0.22em] text-[#6f7f73]">
-                      Dashboard meteo
+                      Conseil du moment
                     </p>
                     <p className="text-sm font-semibold text-[#193425]">
                       {weatherInsight.detail}
@@ -145,7 +155,7 @@ function Section({ title, plants, onQuickWater, getDates }: SectionProps) {
                     onClick={(event) => onQuickWater(event, plant)}
                     className="btn-primary w-full"
                   >
-                    Arroser
+                    Marquer comme arrosee
                   </button>
                 </div>
               </Link>
@@ -412,6 +422,12 @@ export default function HomePage() {
   const normal = plants.filter((plant) => getStatus(plant) === "ok");
   const fallbackNotifications = getDashboardNotifications(plants);
   const unreadCount = notifications.filter((notification) => !notification.is_read).length;
+  const priorityLabel =
+    overdue.length > 0
+      ? `${overdue.length} plante${overdue.length > 1 ? "s" : ""} en retard a traiter en premier`
+      : today.length > 0
+        ? `${today.length} plante${today.length > 1 ? "s" : ""} a verifier aujourd'hui`
+        : "Aucune urgence detectee pour le moment";
 
   if (loading) {
     return (
@@ -427,23 +443,60 @@ export default function HomePage() {
     <main className="page-shell">
       <div className="page-container">
         <div className="topbar-blur mb-6 p-6">
-          <h1 className="hero-title">Dashboard intelligent</h1>
-          <p className="subtle-text mt-2">
-            Gere l&apos;arrosage, la meteo et les signaux de risque en un coup d&apos;oeil
-          </p>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="hero-title">Dashboard intelligent</h1>
+              <p className="subtle-text mt-2">
+                Les priorites, les rappels et la meteo sont reunis ici pour agir sans hesitation.
+              </p>
+            </div>
+
+            <Link href="/plants/new" className="btn-primary">
+              Ajouter une plante
+            </Link>
+          </div>
         </div>
+
+        <section className="mb-6 grid gap-4 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+          <div className="glass-card p-6">
+            <p className="eyebrow mb-3">Priorite du jour</p>
+            <h2 className="section-title !mb-0">Que faire maintenant ?</h2>
+            <p className="mt-3 text-base font-semibold text-[#183624]">{priorityLabel}</p>
+            <p className="subtle-text mt-3 text-sm">
+              Commence par la colonne &quot;En retard&quot;, puis verifie les plantes prevues aujourd&apos;hui.
+            </p>
+          </div>
+
+          <div className="soft-card p-6">
+            <p className="eyebrow mb-2">En retard</p>
+            <p className="text-4xl font-black text-[#183624]">{overdue.length}</p>
+            <p className="subtle-text mt-2 text-sm">A arroser en priorite</p>
+          </div>
+
+          <div className="soft-card p-6">
+            <p className="eyebrow mb-2">Aujourd&apos;hui</p>
+            <p className="text-4xl font-black text-[#183624]">{today.length}</p>
+            <p className="subtle-text mt-2 text-sm">A verifier aujourd&apos;hui</p>
+          </div>
+
+          <div className="soft-card p-6">
+            <p className="eyebrow mb-2">Total</p>
+            <p className="text-4xl font-black text-[#183624]">{plants.length}</p>
+            <p className="subtle-text mt-2 text-sm">Plantes suivies</p>
+          </div>
+        </section>
 
         <section className="glass-card mb-10 p-6 md:p-8">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="eyebrow mb-2">Notifications</p>
               <h2 className="section-title !mb-0">Centre d&apos;attention</h2>
+              <p className="subtle-text mt-2 text-sm">
+                Les alertes importantes apparaissent ici pour eviter les oublis.
+              </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <div className="rounded-full bg-[#edf4ee] px-4 py-2 text-sm font-extrabold text-[#1d3a28]">
-                {plants.length} plantes suivies
-              </div>
               {notifications.length > 0 && (
                 <button onClick={markAllNotificationsRead} className="btn-secondary">
                   {unreadCount > 0 ? `Tout lire (${unreadCount})` : "Tout est lu"}
@@ -495,18 +548,21 @@ export default function HomePage() {
 
         <Section
           title="En retard"
+          subtitle="Ce sont les plantes les plus urgentes. Un arrosage maintenant reduit le risque d'oubli."
           plants={overdue}
           onQuickWater={handleQuickWater}
           getDates={getDates}
         />
         <Section
           title="A arroser aujourd'hui"
+          subtitle="Ces plantes arrivent a leur tour. Verifie la terre et arrose si besoin."
           plants={today}
           onQuickWater={handleQuickWater}
           getDates={getDates}
         />
         <Section
           title="Tout va bien"
+          subtitle="Aucune action immediate. Tu peux simplement garder un oeil sur les conseils meteo."
           plants={normal}
           onQuickWater={handleQuickWater}
           getDates={getDates}

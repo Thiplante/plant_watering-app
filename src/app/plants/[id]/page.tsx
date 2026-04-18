@@ -47,8 +47,18 @@ const EMPTY_NOTES: PlantNotesForm = {
   fertilizerAddedAt: "",
 };
 
+type PageMessage = {
+  type: "success" | "error";
+  text: string;
+};
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function normalizeFrequency(value: number) {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(30, Math.max(1, Math.round(value)));
 }
 
 function toneClasses(tone: string) {
@@ -96,6 +106,7 @@ export default function PlantDetailPage() {
   const [notesAvailable, setNotesAvailable] = useState(true);
   const [weatherRefreshing, setWeatherRefreshing] = useState(false);
   const [notes, setNotes] = useState<PlantNotesForm>(EMPTY_NOTES);
+  const [message, setMessage] = useState<PageMessage | null>(null);
 
   const [form, setForm] = useState<PlantForm>({
     name: "",
@@ -181,6 +192,7 @@ export default function PlantDetailPage() {
 
     try {
       setSavingNotes(true);
+      setMessage(null);
 
       const {
         data: { user },
@@ -202,8 +214,15 @@ export default function PlantDetailPage() {
       }
 
       await loadData();
+      setMessage({
+        type: "success",
+        text: "Notes enregistrees. Tu retrouveras ce suivi a chaque visite.",
+      });
     } catch (error: unknown) {
-      alert(getErrorMessage(error, "Impossible de sauvegarder les notes"));
+      setMessage({
+        type: "error",
+        text: getErrorMessage(error, "Impossible de sauvegarder les notes"),
+      });
     } finally {
       setSavingNotes(false);
     }
@@ -214,6 +233,7 @@ export default function PlantDetailPage() {
 
     try {
       setWeatherRefreshing(true);
+      setMessage(null);
 
       const res = await fetch("/api/weather/refresh", {
         method: "POST",
@@ -231,8 +251,15 @@ export default function PlantDetailPage() {
 
       await loadData();
       router.refresh();
+      setMessage({
+        type: "success",
+        text: "Meteo actualisee. Les conseils affichent maintenant les dernieres donnees.",
+      });
     } catch (error: unknown) {
-      alert(getErrorMessage(error, "Erreur lors de l'actualisation meteo"));
+      setMessage({
+        type: "error",
+        text: getErrorMessage(error, "Erreur lors de l'actualisation meteo"),
+      });
     } finally {
       setWeatherRefreshing(false);
     }
@@ -242,6 +269,7 @@ export default function PlantDetailPage() {
     if (!newImageFile || !plantId) return;
 
     setUpdatingImage(true);
+    setMessage(null);
 
     try {
       const {
@@ -266,7 +294,7 @@ export default function PlantDetailPage() {
         });
 
       if (uploadError) {
-        alert(uploadError.message);
+        setMessage({ type: "error", text: uploadError.message });
         return;
       }
 
@@ -279,8 +307,15 @@ export default function PlantDetailPage() {
 
       setNewImageFile(null);
       await loadData();
+      setMessage({
+        type: "success",
+        text: "Photo mise a jour. La plante est maintenant plus facile a reconnaitre.",
+      });
     } catch (error: unknown) {
-      alert(getErrorMessage(error, "Erreur lors de la mise a jour de l'image"));
+      setMessage({
+        type: "error",
+        text: getErrorMessage(error, "Erreur lors de la mise a jour de l'image"),
+      });
     } finally {
       setUpdatingImage(false);
     }
@@ -289,8 +324,13 @@ export default function PlantDetailPage() {
   const removeImage = async () => {
     if (!plantId) return;
 
+    setMessage(null);
     await supabase.from("plants").update({ image_url: null }).eq("id", plantId);
     await loadData();
+    setMessage({
+      type: "success",
+      text: "Photo retiree.",
+    });
   };
 
   const handleUpdatePlant = async () => {
@@ -298,16 +338,34 @@ export default function PlantDetailPage() {
 
     try {
       setSavingPlant(true);
+      setMessage(null);
+
+      if (!form.name.trim()) {
+        setMessage({
+          type: "error",
+          text: "Le nom de la plante est obligatoire pour l'identifier facilement.",
+        });
+        return;
+      }
+
+      if (!form.city.trim()) {
+        setMessage({
+          type: "error",
+          text: "La ville est obligatoire pour conserver les conseils meteo.",
+        });
+        return;
+      }
 
       const trimmedCity = form.city.trim();
       const previousCity = (plant?.city || "").trim();
       const cityChanged = trimmedCity !== previousCity;
+      const safeFrequency = normalizeFrequency(form.frequency);
 
       const updatePayload: PlantUpdatePayload = {
         name: form.name.trim(),
         city: trimmedCity,
         exposure: form.exposure,
-        watering_frequency_days: form.frequency,
+        watering_frequency_days: safeFrequency,
         can_be_watered_by_rain: form.rain,
         latitude: plant?.latitude ?? null,
         longitude: plant?.longitude ?? null,
@@ -337,9 +395,16 @@ export default function PlantDetailPage() {
         await refreshWeather();
       } else {
         await loadData();
+        setMessage({
+          type: "success",
+          text: "Fiche plante mise a jour.",
+        });
       }
     } catch (error: unknown) {
-      alert(getErrorMessage(error, "Erreur lors de la mise a jour"));
+      setMessage({
+        type: "error",
+        text: getErrorMessage(error, "Erreur lors de la mise a jour"),
+      });
     } finally {
       setSavingPlant(false);
     }
@@ -355,6 +420,7 @@ export default function PlantDetailPage() {
   const handleWater = async () => {
     if (!plantId) return;
 
+    setMessage(null);
     const now = new Date().toISOString();
     const {
       data: { user },
@@ -368,11 +434,20 @@ export default function PlantDetailPage() {
     });
 
     await loadData();
+    setMessage({
+      type: "success",
+      text: "Arrosage enregistre. Le prochain rappel repart de maintenant.",
+    });
   };
 
   const handleDeleteLog = async (logId: string) => {
+    setMessage(null);
     await supabase.from("watering_logs").delete().eq("id", logId);
     await loadData();
+    setMessage({
+      type: "success",
+      text: "Entree d'historique supprimee.",
+    });
   };
 
   const startEditLog = (log: WateringLog) => {
@@ -388,6 +463,7 @@ export default function PlantDetailPage() {
   const handleUpdateLog = async () => {
     if (!editingLogId || !editingLogDate || !plantId) return;
 
+    setMessage(null);
     const isoDate = new Date(editingLogDate).toISOString();
 
     await supabase
@@ -410,12 +486,17 @@ export default function PlantDetailPage() {
 
     cancelEditLog();
     await loadData();
+    setMessage({
+      type: "success",
+      text: "Historique mis a jour.",
+    });
   };
 
   const handleShare = async () => {
     if (!plantId || !shareEmail.trim()) return;
 
     const normalizedEmail = shareEmail.trim().toLowerCase();
+    setMessage(null);
     const { error } = await supabase.from("plant_shares").insert({
       plant_id: plantId,
       user_email: normalizedEmail,
@@ -424,12 +505,23 @@ export default function PlantDetailPage() {
     if (!error) {
       setShareEmail("");
       await loadData();
+      setMessage({
+        type: "success",
+        text: "Acces partage ajoute.",
+      });
+      return;
     }
+
+    setMessage({
+      type: "error",
+      text: getErrorMessage(error, "Impossible d'ajouter ce partage"),
+    });
   };
 
   const handleRemoveShare = async (email: string) => {
     if (!plantId) return;
 
+    setMessage(null);
     await supabase
       .from("plant_shares")
       .delete()
@@ -437,6 +529,10 @@ export default function PlantDetailPage() {
       .eq("user_email", email);
 
     await loadData();
+    setMessage({
+      type: "success",
+      text: "Acces retire.",
+    });
   };
 
   const toDatetimeLocalValue = (dateString: string) => {
@@ -495,6 +591,11 @@ export default function PlantDetailPage() {
   const weatherInsight = getWeatherInsight(plant);
   const healthInsight = getHealthInsight(plant);
   const adaptiveInsight = getAdaptiveWateringInsight(plant);
+  const recommendedRange = `${adaptiveInsight.minDays}${
+    adaptiveInsight.maxDays !== adaptiveInsight.minDays
+      ? ` a ${adaptiveInsight.maxDays}`
+      : ""
+  } jours`;
 
   return (
     <main className="page-shell">
@@ -505,7 +606,7 @@ export default function PlantDetailPage() {
           </Link>
 
           <button onClick={handleWater} className="btn-primary">
-            Arroser
+            Marquer comme arrosee
           </button>
         </div>
 
@@ -519,6 +620,26 @@ export default function PlantDetailPage() {
               Dernier arrosage : <strong>{formatFullDate(plant.last_watered_at)}</strong>
             </p>
           </div>
+
+          <div className="mb-6 rounded-[28px] border border-[rgba(35,75,52,0.08)] bg-[#f7faf7] p-5">
+            <p className="eyebrow mb-2">Action recommandee</p>
+            <p className="text-lg font-black text-[#183624]">{weatherInsight.label}</p>
+            <p className="mt-2 text-sm font-semibold text-[#425345]">
+              {weatherInsight.detail} Rythme conseille actuellement: {recommendedRange}.
+            </p>
+          </div>
+
+          {message && (
+            <div
+              className={`mb-6 rounded-[24px] px-5 py-4 text-sm font-semibold ${
+                message.type === "success"
+                  ? "border border-emerald-100 bg-emerald-50 text-emerald-900"
+                  : "border border-red-100 bg-red-50 text-red-800"
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
 
           <div className="mb-6 grid gap-3 md:grid-cols-3">
             <div className={`rounded-[28px] px-5 py-5 ${toneClasses(weatherInsight.tone)}`}>
@@ -539,11 +660,7 @@ export default function PlantDetailPage() {
               </p>
               <p className="text-lg font-black text-[#183624]">{adaptiveInsight.label}</p>
               <p className="mt-2 text-sm font-semibold text-[#425345]">
-                Intervalle recommande : {adaptiveInsight.minDays}
-                {adaptiveInsight.maxDays !== adaptiveInsight.minDays
-                  ? ` a ${adaptiveInsight.maxDays}`
-                  : ""}{" "}
-                jours
+                Intervalle recommande : {recommendedRange}
               </p>
             </div>
           </div>
@@ -628,7 +745,7 @@ export default function PlantDetailPage() {
 
                 {isWeatherStale(plant.weather_updated_at) && (
                   <p className="text-sm font-semibold text-amber-700">
-                    Les donnees meteo ne sont plus a jour.
+                    Les donnees meteo ne sont plus a jour. Lance une actualisation pour eviter une mauvaise decision.
                   </p>
                 )}
               </div>
@@ -691,6 +808,9 @@ export default function PlantDetailPage() {
                 }
                 className="input-elegant"
               />
+              <p className="subtle-text text-sm">
+                Valeur automatiquement gardee entre 1 et 30 jours pour eviter les erreurs.
+              </p>
             </div>
           </div>
 
@@ -717,7 +837,7 @@ export default function PlantDetailPage() {
               disabled={savingPlant}
               className="btn-primary"
             >
-              {savingPlant ? "Sauvegarde..." : "Sauvegarder les modifications"}
+              {savingPlant ? "Sauvegarde..." : "Enregistrer les reglages"}
             </button>
 
             <button onClick={handleDeletePlant} className="btn-danger">
@@ -772,7 +892,7 @@ export default function PlantDetailPage() {
 
               <div className="mt-5 flex items-center justify-between gap-3">
                 <p className="text-sm subtle-text">
-                  Ces notes sont maintenant destinees a etre stockees dans Supabase.
+                  Note ici les infos utiles pour ne plus hesiter au prochain controle.
                 </p>
                 <button onClick={saveNotes} className="btn-secondary">
                   {savingNotes ? "Sauvegarde..." : "Enregistrer les notes"}
@@ -832,6 +952,9 @@ export default function PlantDetailPage() {
         <section className="soft-card p-6 md:p-8">
           <p className="eyebrow mb-3">Historique</p>
           <h2 className="section-title mb-6">Gestion des arrosages</h2>
+          <p className="subtle-text mb-5 text-sm">
+            Modifie une date seulement si tu veux corriger l&apos;historique. La derniere date pilote le prochain rappel.
+          </p>
 
           <div className="space-y-3">
             {history.length === 0 ? (
