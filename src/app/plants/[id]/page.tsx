@@ -7,6 +7,12 @@ import { useCallback, useEffect, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
 import {
+  getPlantDisplayName,
+  getPlantIdentitySubtitle,
+  type PlantIdentificationOption,
+} from "@/lib/plants/identity";
+import { uploadPlantImage } from "@/lib/plants/images";
+import {
   getAdaptiveWateringInsight,
   getHealthInsight,
   getWeatherInsight,
@@ -15,7 +21,7 @@ import { supabase } from "@/lib/supabase";
 import type { Plant, PlantNote, PlantShare, WateringLog } from "@/lib/types";
 
 type PlantForm = {
-  name: string;
+  customName: string;
   city: string;
   exposure: string;
   frequency: number;
@@ -31,6 +37,11 @@ type PlantNotesForm = {
 type PlantUpdatePayload = Pick<
   Plant,
   | "name"
+  | "custom_name"
+  | "identified_name"
+  | "scientific_name"
+  | "identification_confidence"
+  | "identification_options"
   | "city"
   | "exposure"
   | "watering_frequency_days"
@@ -117,9 +128,14 @@ export default function PlantDetailPage() {
   const [message, setMessage] = useState<PageMessage | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [selectedIdentification, setSelectedIdentification] =
+    useState<PlantIdentificationOption | null>(null);
+  const [identificationOptions, setIdentificationOptions] = useState<
+    PlantIdentificationOption[]
+  >([]);
 
   const [form, setForm] = useState<PlantForm>({
-    name: "",
+    customName: "",
     city: "",
     exposure: "mi-ombre",
     frequency: 3,
@@ -174,12 +190,23 @@ export default function PlantDetailPage() {
     setHistory(historyData);
     setSharedWith(sharesData);
     setForm({
-      name: plantData.name || "",
+      customName: plantData.custom_name || "",
       city: plantData.city || "",
       exposure: plantData.exposure || "mi-ombre",
       frequency: plantData.watering_frequency_days || 3,
       rain: Boolean(plantData.can_be_watered_by_rain),
     });
+    setIdentificationOptions(plantData.identification_options || []);
+    setSelectedIdentification(
+      plantData.identified_name
+        ? {
+            common_name: plantData.identified_name,
+            scientific_name: plantData.scientific_name || "",
+            confidence: plantData.identification_confidence ?? 0,
+            reason: "Identification enregistree pour cette plante.",
+          }
+        : null
+    );
 
     if (notesResult.error) {
       setNotesAvailable(false);
@@ -291,28 +318,11 @@ export default function PlantDetailPage() {
         return;
       }
 
-      const fileExt = newImageFile.name.split(".").pop() || "png";
-      const fileName = `${user.id}/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("plant-images")
-        .upload(fileName, newImageFile, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        setMessage({ type: "error", text: uploadError.message });
-        return;
-      }
-
-      const { data } = supabase.storage.from("plant-images").getPublicUrl(fileName);
+      const imageUrl = await uploadPlantImage(newImageFile, user.id);
 
       await supabase
         .from("plants")
-        .update({ image_url: data.publicUrl })
+        .update({ image_url: imageUrl })
         .eq("id", plantId);
 
       setNewImageFile(null);
@@ -357,14 +367,6 @@ export default function PlantDetailPage() {
       setSavingPlant(true);
       setMessage(null);
 
-      if (!form.name.trim()) {
-        setMessage({
-          type: "error",
-          text: "Le nom de la plante est obligatoire pour l'identifier facilement.",
-        });
-        return;
-      }
-
       if (!form.city.trim()) {
         setMessage({
           type: "error",
@@ -377,9 +379,18 @@ export default function PlantDetailPage() {
       const previousCity = (plant?.city || "").trim();
       const cityChanged = trimmedCity !== previousCity;
       const safeFrequency = normalizeFrequency(form.frequency);
+      const resolvedDisplayName =
+        form.customName.trim() || selectedIdentification?.common_name || plant?.name || "Plante";
 
       const updatePayload: PlantUpdatePayload = {
-        name: form.name.trim(),
+        name: resolvedDisplayName,
+        custom_name: form.customName.trim() || null,
+        identified_name: selectedIdentification?.common_name || plant?.identified_name || null,
+        scientific_name:
+          selectedIdentification?.scientific_name || plant?.scientific_name || null,
+        identification_confidence:
+          selectedIdentification?.confidence ?? plant?.identification_confidence ?? null,
+        identification_options: identificationOptions,
         city: trimmedCity,
         exposure: form.exposure,
         watering_frequency_days: safeFrequency,
@@ -723,6 +734,7 @@ export default function PlantDetailPage() {
       : ""
   } jours`;
   const confirmContent = getConfirmContent();
+  const identitySubtitle = getPlantIdentitySubtitle(plant);
 
   return (
     <main className="page-shell">
@@ -741,8 +753,11 @@ export default function PlantDetailPage() {
           <div className="mb-8">
             <p className="eyebrow mb-3">Fiche plante</p>
             <h1 className="hero-title" style={{ fontSize: "clamp(2.2rem, 5vw, 3.8rem)" }}>
-              {plant.name}
+              {getPlantDisplayName(plant)}
             </h1>
+            {identitySubtitle && (
+              <p className="mt-3 text-base font-semibold text-[#5c6c5f]">{identitySubtitle}</p>
+            )}
             <p className="subtle-text mt-4">
               Dernier arrosage : <strong>{formatFullDate(plant.last_watered_at)}</strong>
             </p>
@@ -907,13 +922,13 @@ export default function PlantDetailPage() {
 
           <div className="mb-6 grid-elegant-2">
             <div className="field">
-              <label className="field-label">Nom</label>
+              <label className="field-label">Nom personnel optionnel</label>
               <input
                 type="text"
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                value={form.customName}
+                onChange={(event) => setForm({ ...form, customName: event.target.value })}
                 className="input-elegant"
-                placeholder="Nom de la plante"
+                placeholder="Ex: La grande du salon"
               />
             </div>
 
@@ -958,6 +973,63 @@ export default function PlantDetailPage() {
               </p>
             </div>
           </div>
+
+          {(plant.identified_name || identificationOptions.length > 0) && (
+            <div className="soft-card mb-6 p-5">
+              <p className="eyebrow mb-3">Identification</p>
+              <div className="space-y-3">
+                {selectedIdentification && (
+                  <div className="rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-white px-4 py-4">
+                    <p className="font-black text-[#183624]">
+                      {selectedIdentification.common_name}
+                    </p>
+                    <p className="subtle-text text-sm">
+                      {selectedIdentification.scientific_name || "Nom scientifique non renseigne"}
+                    </p>
+                    {selectedIdentification.confidence > 0 && (
+                      <p className="mt-2 text-sm font-semibold text-[#425345]">
+                        Confiance estimee: {selectedIdentification.confidence}%
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {identificationOptions.length > 0 && (
+                  <div className="grid gap-3">
+                    {identificationOptions.map((option) => {
+                      const selected =
+                        selectedIdentification?.common_name === option.common_name &&
+                        selectedIdentification?.scientific_name === option.scientific_name;
+
+                      return (
+                        <button
+                          key={`${option.common_name}-${option.scientific_name}`}
+                          type="button"
+                          onClick={() => setSelectedIdentification(option)}
+                          className={`rounded-[24px] border px-4 py-4 text-left transition ${
+                            selected
+                              ? "border-[#2f6646] bg-[#edf4ee]"
+                              : "border-[rgba(35,75,52,0.08)] bg-white hover:border-[rgba(35,75,52,0.18)]"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="font-black text-[#183624]">{option.common_name}</p>
+                              <p className="subtle-text text-sm">{option.scientific_name}</p>
+                            </div>
+                            <span className="pill">{option.confidence}% probable</span>
+                          </div>
+                          <p className="mt-3 text-sm font-semibold text-[#425345]">
+                            {option.reason}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="checkbox-row mb-6">
             <input

@@ -1,9 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { uploadPlantImage, readFileAsDataUrl } from "@/lib/plants/images";
+import type { PlantIdentificationOption } from "@/lib/plants/identity";
 import { refreshPlantWeather } from "@/lib/weather/actions";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -11,9 +14,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 type FormErrors = {
-  name?: string;
+  identity?: string;
   city?: string;
   frequency?: string;
+  photo?: string;
   submit?: string;
 };
 
@@ -23,11 +27,20 @@ function normalizeFrequency(value: number) {
 }
 
 export default function NewPlantPage() {
-  const [name, setName] = useState("");
+  const [customName, setCustomName] = useState("");
   const [frequency, setFrequency] = useState(3);
   const [city, setCity] = useState("");
   const [exposure, setExposure] = useState("mi-ombre");
   const [canBeWateredByRain, setCanBeWateredByRain] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [identifying, setIdentifying] = useState(false);
+  const [identificationSummary, setIdentificationSummary] = useState("");
+  const [identificationOptions, setIdentificationOptions] = useState<
+    PlantIdentificationOption[]
+  >([]);
+  const [selectedIdentification, setSelectedIdentification] =
+    useState<PlantIdentificationOption | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,11 +64,26 @@ export default function NewPlantPage() {
     void checkUser();
   }, [router]);
 
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreview("");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(imageFile);
+    setImagePreview(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [imageFile]);
+
   const validateForm = () => {
     const nextErrors: FormErrors = {};
 
-    if (!name.trim()) {
-      nextErrors.name = "Ajoute un nom pour reconnaitre la plante d'un coup d'oeil.";
+    if (!customName.trim() && !selectedIdentification) {
+      nextErrors.identity =
+        "Ajoute un nom personnel ou choisis une plante proposee apres analyse photo.";
     }
 
     if (!city.trim()) {
@@ -70,15 +98,69 @@ export default function NewPlantPage() {
     return Object.keys(nextErrors).length === 0;
   };
 
+  const resolvedDisplayName = useMemo(() => {
+    return customName.trim() || selectedIdentification?.common_name || "Plante a identifier";
+  }, [customName, selectedIdentification]);
+
   const formSummary = useMemo(() => {
-    const trimmedName = name.trim() || "Plante sans nom";
     const trimmedCity = city.trim() || "Ville a renseigner";
     const rainMode = canBeWateredByRain ? "Prend en compte la pluie" : "Arrosage manuel seulement";
+    const plantType = selectedIdentification?.scientific_name
+      ? `${selectedIdentification.common_name} • ${selectedIdentification.scientific_name}`
+      : selectedIdentification?.common_name || "Type non precise";
 
-    return `${trimmedName}, ${exposure}, tous les ${normalizeFrequency(
+    return `${resolvedDisplayName}, ${plantType}, ${exposure}, tous les ${normalizeFrequency(
       frequency
     )} jours, ${trimmedCity}, ${rainMode}.`;
-  }, [canBeWateredByRain, city, exposure, frequency, name]);
+  }, [canBeWateredByRain, city, exposure, frequency, resolvedDisplayName, selectedIdentification]);
+
+  const handleIdentify = async () => {
+    if (!imageFile) {
+      setErrors((current) => ({
+        ...current,
+        photo: "Ajoute une photo pour recevoir des propositions de plante.",
+      }));
+      return;
+    }
+
+    try {
+      setIdentifying(true);
+      setErrors((current) => ({ ...current, photo: undefined, submit: undefined }));
+
+      const imageDataUrl = await readFileAsDataUrl(imageFile);
+      const response = await fetch("/api/plants/identify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ imageDataUrl }),
+      });
+
+      const data = (await response.json()) as {
+        error?: string;
+        summary?: string;
+        suggestions?: PlantIdentificationOption[];
+      };
+
+      if (!response.ok || !data.suggestions) {
+        throw new Error(data.error || "Impossible d'identifier cette plante");
+      }
+
+      setIdentificationSummary(data.summary || "");
+      setIdentificationOptions(data.suggestions);
+      setSelectedIdentification(data.suggestions[0] || null);
+    } catch (error: unknown) {
+      setErrors((current) => ({
+        ...current,
+        photo: getErrorMessage(
+          error,
+          "Impossible d'identifier la plante a partir de cette photo"
+        ),
+      }));
+    } finally {
+      setIdentifying(false);
+    }
+  };
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -100,17 +182,26 @@ export default function NewPlantPage() {
         return;
       }
 
+      const imageUrl = imageFile ? await uploadPlantImage(imageFile, user.id) : null;
       const safeFrequency = normalizeFrequency(frequency);
+      const chosenIdentification = selectedIdentification;
+
       const { data: newPlant, error } = await supabase
         .from("plants")
         .insert({
           owner_id: user.id,
-          name: name.trim(),
+          name: resolvedDisplayName,
+          custom_name: customName.trim() || null,
+          identified_name: chosenIdentification?.common_name || null,
+          scientific_name: chosenIdentification?.scientific_name || null,
+          identification_confidence: chosenIdentification?.confidence ?? null,
+          identification_options: identificationOptions,
           watering_frequency_days: safeFrequency,
           city: city.trim(),
           exposure,
           can_be_watered_by_rain: canBeWateredByRain,
           last_watered_at: new Date().toISOString(),
+          image_url: imageUrl,
         })
         .select()
         .single();
@@ -151,10 +242,7 @@ export default function NewPlantPage() {
   return (
     <main className="page-shell">
       <div className="page-container-narrow">
-        <Link
-          href="/"
-          className="btn-secondary"
-        >
+        <Link href="/" className="btn-secondary">
           Retour au dashboard
         </Link>
 
@@ -162,36 +250,136 @@ export default function NewPlantPage() {
           <div className="mb-8">
             <p className="eyebrow mb-3">Nouvelle plante</p>
             <h1 className="hero-title" style={{ fontSize: "clamp(2.2rem, 5vw, 3.6rem)" }}>
-              Une creation simple, sans erreur
+              Identifie la plante, puis personalise-la
             </h1>
             <p className="subtle-text mt-4 max-w-2xl text-base">
-              Renseigne les 4 infos utiles, et l&apos;application preparera le suivi
-              d&apos;arrosage et la meteo pour toi.
+              Une photo peut te proposer plusieurs plantes probables. Tu peux ensuite garder ce
+              nom, ou ajouter ton propre nom personnel.
             </p>
           </div>
 
           <form onSubmit={handleCreate} className="space-y-6" noValidate>
             <section className="soft-card p-5 md:p-6">
-              <p className="eyebrow mb-4">Essentiel</p>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="field">
-                  <label htmlFor="name" className="field-label">
-                    Nom de la plante
-                  </label>
+              <p className="eyebrow mb-4">Photo et reconnaissance</p>
+
+              <div className="space-y-4">
+                {imagePreview ? (
+                  <Image
+                    src={imagePreview}
+                    alt="Apercu de la plante"
+                    width={1200}
+                    height={720}
+                    unoptimized
+                    className="h-[240px] w-full rounded-[28px] object-cover"
+                  />
+                ) : (
+                  <div className="soft-card flex h-[220px] items-center justify-center rounded-[28px] subtle-text">
+                    Ajoute une photo pour recevoir plusieurs propositions de plante.
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <input
-                    id="name"
-                    type="text"
-                    placeholder="Ex: Mon monstera"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    aria-invalid={Boolean(errors.name)}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(event) => setImageFile(event.target.files?.[0] || null)}
                     className="input-elegant"
                   />
-                  <p className={`text-sm ${errors.name ? "text-red-700" : "subtle-text"}`}>
-                    {errors.name || "Choisis un nom simple que tu reconnaitras tout de suite."}
+                  <button
+                    type="button"
+                    onClick={() => void handleIdentify()}
+                    disabled={!imageFile || identifying}
+                    className="btn-secondary whitespace-nowrap"
+                  >
+                    {identifying ? "Analyse..." : "Identifier depuis la photo"}
+                  </button>
+                </div>
+
+                {errors.photo && (
+                  <div className="feedback-banner feedback-error">{errors.photo}</div>
+                )}
+
+                {identificationOptions.length > 0 && (
+                  <div className="rounded-[28px] border border-[rgba(35,75,52,0.08)] bg-white/80 p-5">
+                    <p className="field-label mb-3">Propositions</p>
+                    {identificationSummary && (
+                      <p className="subtle-text mb-4 text-sm">{identificationSummary}</p>
+                    )}
+
+                    <div className="grid gap-3">
+                      {identificationOptions.map((option) => {
+                        const selected =
+                          selectedIdentification?.common_name === option.common_name &&
+                          selectedIdentification?.scientific_name === option.scientific_name;
+
+                        return (
+                          <button
+                            key={`${option.common_name}-${option.scientific_name}`}
+                            type="button"
+                            onClick={() => setSelectedIdentification(option)}
+                            className={`rounded-[24px] border px-4 py-4 text-left transition ${
+                              selected
+                                ? "border-[#2f6646] bg-[#edf4ee]"
+                                : "border-[rgba(35,75,52,0.08)] bg-white hover:border-[rgba(35,75,52,0.18)]"
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="font-black text-[#183624]">{option.common_name}</p>
+                                <p className="subtle-text text-sm">{option.scientific_name}</p>
+                              </div>
+                              <span className="pill">{option.confidence}% probable</span>
+                            </div>
+                            <p className="mt-3 text-sm font-semibold text-[#425345]">
+                              {option.reason}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="soft-card p-5 md:p-6">
+              <p className="eyebrow mb-4">Identite visible</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="field">
+                  <label htmlFor="custom-name" className="field-label">
+                    Nom personnel optionnel
+                  </label>
+                  <input
+                    id="custom-name"
+                    type="text"
+                    placeholder="Ex: La grande du salon"
+                    value={customName}
+                    onChange={(event) => setCustomName(event.target.value)}
+                    aria-invalid={Boolean(errors.identity)}
+                    className="input-elegant"
+                  />
+                  <p className={`text-sm ${errors.identity ? "text-red-700" : "subtle-text"}`}>
+                    {errors.identity ||
+                      "Si tu ne mets pas de nom personnel, le dashboard utilisera la plante identifiee."}
                   </p>
                 </div>
 
+                <div className="rounded-[28px] border border-[rgba(35,75,52,0.08)] bg-[#f7faf7] p-5">
+                  <p className="field-label mb-2">Nom affiche sur le dashboard</p>
+                  <p className="text-2xl font-black text-[#183624]">{resolvedDisplayName}</p>
+                  <p className="subtle-text mt-2 text-sm">
+                    {selectedIdentification
+                      ? `${selectedIdentification.common_name} • ${selectedIdentification.scientific_name}`
+                      : "Ajoute un nom personnel ou analyse une photo pour mieux distinguer la plante."}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="soft-card p-5 md:p-6">
+              <p className="eyebrow mb-4">Rythme et contexte</p>
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="field">
                   <label htmlFor="city" className="field-label">
                     Ville pour la meteo
@@ -201,20 +389,15 @@ export default function NewPlantPage() {
                     type="text"
                     placeholder="Ex: Bordeaux"
                     value={city}
-                    onChange={(e) => setCity(e.target.value)}
+                    onChange={(event) => setCity(event.target.value)}
                     aria-invalid={Boolean(errors.city)}
                     className="input-elegant"
                   />
                   <p className={`text-sm ${errors.city ? "text-red-700" : "subtle-text"}`}>
-                    {errors.city || "La ville permet d&apos;afficher les conseils meteo reels."}
+                    {errors.city || "La ville permet d'afficher les conseils meteo reels."}
                   </p>
                 </div>
-              </div>
-            </section>
 
-            <section className="soft-card p-5 md:p-6">
-              <p className="eyebrow mb-4">Rythme d&apos;arrosage</p>
-              <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
                 <div className="field">
                   <label htmlFor="frequency" className="field-label">
                     Frequence d&apos;arrosage
@@ -226,14 +409,30 @@ export default function NewPlantPage() {
                     min={1}
                     max={30}
                     value={frequency}
-                    onChange={(e) => setFrequency(Number(e.target.value))}
+                    onChange={(event) => setFrequency(Number(event.target.value))}
                     aria-invalid={Boolean(errors.frequency)}
                     className="input-elegant"
                   />
                   <p className={`text-sm ${errors.frequency ? "text-red-700" : "subtle-text"}`}>
                     {errors.frequency ||
-                      "Garde une base simple: 3 a 7 jours pour beaucoup de plantes d&apos;interieur."}
+                      "Garde une base simple: 3 a 7 jours pour beaucoup de plantes d'interieur."}
                   </p>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="exposure" className="field-label">
+                    Exposition lumineuse
+                  </label>
+                  <select
+                    id="exposure"
+                    value={exposure}
+                    onChange={(event) => setExposure(event.target.value)}
+                    className="select-elegant"
+                  >
+                    <option value="soleil">Plein soleil</option>
+                    <option value="mi-ombre">Mi-ombre</option>
+                    <option value="ombre">Ombre</option>
+                  </select>
                 </div>
 
                 <div className="rounded-[28px] border border-[rgba(35,75,52,0.08)] bg-[#f7faf7] p-5">
@@ -246,47 +445,23 @@ export default function NewPlantPage() {
                   </p>
                 </div>
               </div>
-            </section>
 
-            <section className="soft-card p-5 md:p-6">
-              <p className="eyebrow mb-4">Contexte de la plante</p>
-              <div className="space-y-4">
-                <div className="field">
-                  <label htmlFor="exposure" className="field-label">
-                    Exposition lumineuse
-                  </label>
-                  <select
-                    id="exposure"
-                    value={exposure}
-                    onChange={(e) => setExposure(e.target.value)}
-                    className="select-elegant"
-                  >
-                    <option value="soleil">Plein soleil</option>
-                    <option value="mi-ombre">Mi-ombre</option>
-                    <option value="ombre">Ombre</option>
-                  </select>
+              <label className="checkbox-row mt-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={canBeWateredByRain}
+                  onChange={(event) => setCanBeWateredByRain(event.target.checked)}
+                  className="checkbox-elegant"
+                />
+                <div>
+                  <p className="text-[0.95rem] font-extrabold text-[#183624]">
+                    Cette plante peut profiter de la pluie
+                  </p>
                   <p className="subtle-text text-sm">
-                    Ce choix aide l&apos;app a mieux interpréter les conditions de la plante.
+                    Active cette option si la plante est dehors ou peut vraiment etre arrosee par la pluie.
                   </p>
                 </div>
-
-                <label className="checkbox-row cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={canBeWateredByRain}
-                    onChange={(e) => setCanBeWateredByRain(e.target.checked)}
-                    className="checkbox-elegant"
-                  />
-                  <div>
-                    <p className="text-[0.95rem] font-extrabold text-[#183624]">
-                      Cette plante peut profiter de la pluie
-                    </p>
-                    <p className="subtle-text text-sm">
-                      Active cette option si la plante est dehors ou peut vraiment etre arrosee par la pluie.
-                    </p>
-                  </div>
-                </label>
-              </div>
+              </label>
             </section>
 
             <section className="rounded-[32px] border border-[rgba(35,75,52,0.08)] bg-white/80 p-5 md:p-6">
@@ -298,9 +473,7 @@ export default function NewPlantPage() {
             </section>
 
             {errors.submit && (
-              <div className="rounded-[24px] border border-red-100 bg-red-50 px-5 py-4 text-sm font-semibold text-red-800">
-                {errors.submit}
-              </div>
+              <div className="feedback-banner feedback-error">{errors.submit}</div>
             )}
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -308,7 +481,7 @@ export default function NewPlantPage() {
                 {saving ? "Enregistrement..." : "Creer la plante"}
               </button>
               <p className="subtle-text text-sm">
-                Tout pourra etre modifie ensuite depuis la fiche plante.
+                Tu pourras ensuite changer la photo, le nom personnel et l&apos;identification depuis la fiche plante.
               </p>
             </div>
           </form>

@@ -4,6 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useState } from "react";
+import {
+  getPlantDisplayName,
+  getPlantIdentitySubtitle,
+} from "@/lib/plants/identity";
 import { buildNotificationDrafts } from "@/lib/plants/notifications";
 import {
   getAdaptiveWateringInsight,
@@ -105,7 +109,12 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
                     </span>
                   </div>
 
-                  <h3 className="plant-title">{plant.name}</h3>
+                  <h3 className="plant-title">{getPlantDisplayName(plant)}</h3>
+                  {getPlantIdentitySubtitle(plant) && (
+                    <p className="mb-3 text-sm font-semibold text-[#5b6b5e]">
+                      {getPlantIdentitySubtitle(plant)}
+                    </p>
+                  )}
 
                   <div className="pill-row mb-4">
                     <span className="pill">{plant.city || "Ville inconnue"}</span>
@@ -321,7 +330,7 @@ export default function HomePage() {
       await fetchPlants();
       setMessage({
         type: "success",
-        text: `${plant.name} est maintenant marquee comme arrosee.`,
+        text: `${getPlantDisplayName(plant)} est maintenant marquee comme arrosee.`,
       });
     } catch {
       setMessage({
@@ -364,7 +373,7 @@ export default function HomePage() {
         await fetchPlants();
         setMessage({
           type: "success",
-          text: `${relatedPlant.name} a ete marquee comme arrosee depuis les notifications.`,
+          text: `${getPlantDisplayName(relatedPlant)} a ete marquee comme arrosee depuis les notifications.`,
         });
       } catch {
         setMessage({

@@ -2,6 +2,11 @@ export type Plant = {
   id: string;
   owner_id: string;
   name: string;
+  custom_name: string | null;
+  identified_name: string | null;
+  scientific_name: string | null;
+  identification_confidence: number | null;
+  identification_options: import("@/lib/plants/identity").PlantIdentificationOption[];
   city: string | null;
   exposure: string | null;
   watering_frequency_days: number;
