@@ -18,6 +18,8 @@ export type PlantCareProfile = {
   difficulty: CareDifficulty;
   feeding: string;
   notes: string;
+  commonMistakes: string[];
+  seasonalTip: string;
 };
 
 const CARE_PROFILES: PlantCareProfile[] = [
@@ -34,6 +36,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "facile",
     feeding: "Engrais doux toutes les 3 a 4 semaines au printemps et en ete.",
     notes: "Laisse secher les premiers centimetres de terre entre deux arrosages.",
+    commonMistakes: ["Trop d'eau", "Soleil direct violent", "Pot trop petit"],
+    seasonalTip: "Au printemps, accompagne la reprise avec un support ou un tuteur si besoin.",
   },
   {
     commonNames: ["pothos", "scindapsus", "lierre du diable"],
@@ -48,6 +52,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "facile",
     feeding: "Un engrais leger toutes les 4 semaines en periode de croissance.",
     notes: "Supporte mieux un leger oubli d'arrosage qu'un exces d'eau.",
+    commonMistakes: ["Excès d'arrosage", "Coin trop sombre", "Eau stagnante"],
+    seasonalTip: "Au printemps, raccourcis les tiges trop longues pour densifier la plante.",
   },
   {
     commonNames: ["langue de belle-mere", "sansevieria", "dracaena trifasciata"],
@@ -62,6 +68,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "facile",
     feeding: "Peu d'engrais, une fois par mois au maximum en ete.",
     notes: "Le substrat doit presque secher completement avant le prochain arrosage.",
+    commonMistakes: ["Excès d'eau", "Pot sans drainage", "Froid humide"],
+    seasonalTip: "En hiver, espace encore davantage les arrosages.",
   },
   {
     commonNames: ["spathiphyllum", "fleur de lune", "peace lily"],
@@ -76,6 +84,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "intermediaire",
     feeding: "Engrais floraison leger toutes les 4 semaines en croissance.",
     notes: "Les feuilles tombantes signalent vite un manque d'eau, mais elle repart bien.",
+    commonMistakes: ["Air trop sec", "Soleil direct", "Terreau qui seche trop"],
+    seasonalTip: "En periode chaude, surveille la terre plus souvent que d'habitude.",
   },
   {
     commonNames: ["orchidee", "phalaenopsis"],
@@ -90,6 +100,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "intermediaire",
     feeding: "Engrais orchidee tres dilue une a deux fois par mois.",
     notes: "Mieux vaut un bain court bien egoutte qu'un substrat constamment humide.",
+    commonMistakes: ["Eau stagnante", "Cache-pot fermé", "Soleil direct"],
+    seasonalTip: "Apres floraison, garde une lumiere stable pour favoriser une nouvelle hampe.",
   },
   {
     commonNames: ["geranium", "pelargonium"],
@@ -104,6 +116,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "facile",
     feeding: "Engrais floraison regulier en pleine saison.",
     notes: "Arroser au pied et laisser la surface du terreau secher legerement.",
+    commonMistakes: ["Feuillage trempé", "Manque de soleil", "Oubli d'engrais en floraison"],
+    seasonalTip: "Retire les fleurs fanées pour prolonger la floraison.",
   },
   {
     commonNames: ["ficus elastica", "caoutchouc", "ficus"],
@@ -118,6 +132,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "intermediaire",
     feeding: "Engrais vert toutes les 3 a 4 semaines en croissance.",
     notes: "Les feuilles peuvent marquer vite si l'arrosage est trop irrégulier.",
+    commonMistakes: ["Changements brusques d'emplacement", "Excès d'eau", "Air trop sec"],
+    seasonalTip: "Nettoie les feuilles pour garder une bonne photosynthese.",
   },
   {
     commonNames: ["aloe vera", "aloe"],
@@ -132,6 +148,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "facile",
     feeding: "Tres peu d'engrais, une fois par mois maximum au printemps.",
     notes: "Toujours laisser le substrat secher entre deux arrosages.",
+    commonMistakes: ["Trop d'eau", "Lumiere insuffisante", "Pot sans drainage"],
+    seasonalTip: "En hiver, garde-la au plus pres d'une source de lumiere.",
   },
   {
     commonNames: ["calathea", "maranta"],
@@ -146,6 +164,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "expert",
     feeding: "Engrais leger toutes les 4 semaines en saison.",
     notes: "Les pointes seches apparaissent vite si l'air est trop sec.",
+    commonMistakes: ["Air trop sec", "Eau calcaire", "Courant d'air"],
+    seasonalTip: "Brumise seulement si l'air est sec et que la ventilation est correcte.",
   },
   {
     commonNames: ["zz plant", "zamioculcas", "plante zz"],
@@ -160,6 +180,8 @@ const CARE_PROFILES: PlantCareProfile[] = [
     difficulty: "facile",
     feeding: "Un engrais leger toutes les 4 a 6 semaines en saison suffit.",
     notes: "Attendre que le terreau soit bien sec avant d'arroser.",
+    commonMistakes: ["Excès d'eau", "Pot trop grand", "Peu de lumiere longtemps"],
+    seasonalTip: "Tourne le pot de temps en temps pour une silhouette plus reguliere.",
   },
 ];
 

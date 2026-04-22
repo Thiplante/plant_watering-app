@@ -47,6 +47,16 @@ export default function Header() {
               >
                 Nouvelle plante
               </Link>
+              <Link
+                href="/settings"
+                className={`rounded-full px-4 py-2 text-sm font-extrabold transition ${
+                  pathname === "/settings"
+                    ? "bg-[#edf4ee] text-[#183624]"
+                    : "text-[#5e7061] hover:bg-white/80 hover:text-[#28563c]"
+                }`}
+              >
+                Profil
+              </Link>
             </nav>
           </div>
 
@@ -84,6 +94,16 @@ export default function Header() {
             }`}
           >
             Ajouter
+          </Link>
+          <Link
+            href="/settings"
+            className={`flex-1 rounded-full px-4 py-2 text-center text-sm font-extrabold transition ${
+              pathname === "/settings"
+                ? "bg-[#edf4ee] text-[#183624]"
+                : "text-[#5e7061] hover:bg-white/80 hover:text-[#28563c]"
+            }`}
+          >
+            Profil
           </Link>
         </div>
       </div>

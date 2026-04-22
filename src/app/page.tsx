@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useState } from "react";
+import BrowserNotificationPrompt from "@/components/BrowserNotificationPrompt";
 import {
   getPlantDisplayName,
   getPlantIdentitySubtitle,
@@ -20,8 +21,9 @@ import {
   getHealthInsight,
   getWeatherInsight,
 } from "@/lib/plants/insights";
+import { ensureProfile } from "@/lib/profiles";
 import { supabase } from "@/lib/supabase";
-import type { AppNotification, Plant, PlantShare } from "@/lib/types";
+import type { AppNotification, Plant, PlantShare, Profile } from "@/lib/types";
 
 type PlantStatus = "unknown" | "overdue" | "today" | "ok";
 
@@ -183,6 +185,7 @@ export default function HomePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<HomeMessage | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [sortMode, setSortMode] = useState<SortMode>("urgency");
@@ -258,6 +261,8 @@ export default function HomePage() {
     }
 
     setUserId(user.id);
+    const currentProfile = await ensureProfile();
+    setProfile(currentProfile);
 
     const { data: myPlantsData } = await supabase
       .from("plants")
@@ -572,6 +577,24 @@ export default function HomePage() {
   return (
     <main className="page-shell">
       <div className="page-container">
+        {!profile?.onboarding_completed && (
+          <div className="glass-card mb-6 p-6">
+            <p className="eyebrow mb-2">Bienvenue</p>
+            <h2 className="section-title !mb-0">Finaliser mon espace</h2>
+            <p className="subtle-text mt-2 text-sm">
+              Ajoute ton nom, ton foyer et tes preferences pour rendre l&apos;application plus utile
+              et plus personnelle.
+            </p>
+            <div className="mt-4">
+              <Link href="/settings" className="btn-secondary">
+                Completer mon profil
+              </Link>
+            </div>
+          </div>
+        )}
+
+        <BrowserNotificationPrompt />
+
         <div className="topbar-blur mb-6 p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>

@@ -28,7 +28,14 @@ import {
   getWeatherInsight,
 } from "@/lib/plants/insights";
 import { supabase } from "@/lib/supabase";
-import type { Plant, PlantNote, PlantShare, WateringLog } from "@/lib/types";
+import type {
+  Plant,
+  PlantHealthCheck,
+  PlantJournalEntry,
+  PlantNote,
+  PlantShare,
+  WateringLog,
+} from "@/lib/types";
 
 type PlantForm = {
   customName: string;
@@ -42,6 +49,19 @@ type PlantNotesForm = {
   repottedAt: string;
   leafStatus: string;
   fertilizerAddedAt: string;
+  locationLabel: string;
+  potSize: string;
+  substrateType: string;
+  purchaseDate: string;
+  petsPresent: boolean;
+  childrenPresent: boolean;
+};
+
+type HealthCheckDraft = {
+  summary: string;
+  urgency: "low" | "medium" | "high";
+  likely_cause: string;
+  recommendations: string[];
 };
 
 type PlantUpdatePayload = Pick<
@@ -67,6 +87,12 @@ const EMPTY_NOTES: PlantNotesForm = {
   repottedAt: "",
   leafStatus: "",
   fertilizerAddedAt: "",
+  locationLabel: "",
+  potSize: "",
+  substrateType: "",
+  purchaseDate: "",
+  petsPresent: false,
+  childrenPresent: false,
 };
 
 type PageMessage = {
@@ -81,7 +107,7 @@ type ConfirmState =
   | { kind: "remove-share"; email: string }
   | null;
 
-type DetailTab = "overview" | "weather" | "journal" | "settings";
+type DetailTab = "overview" | "weather" | "health" | "journal" | "settings";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -99,6 +125,12 @@ function mapNotes(note: PlantNote | null): PlantNotesForm {
     repottedAt: note.repotted_at || "",
     leafStatus: note.leaf_status || "",
     fertilizerAddedAt: note.fertilizer_added_at || "",
+    locationLabel: note.location_label || "",
+    potSize: note.pot_size || "",
+    substrateType: note.substrate_type || "",
+    purchaseDate: note.purchase_date || "",
+    petsPresent: Boolean(note.pets_present),
+    childrenPresent: Boolean(note.children_present),
   };
 }
 
@@ -123,6 +155,13 @@ export default function PlantDetailPage() {
   const [notesAvailable, setNotesAvailable] = useState(true);
   const [weatherRefreshing, setWeatherRefreshing] = useState(false);
   const [notes, setNotes] = useState<PlantNotesForm>(EMPTY_NOTES);
+  const [journalEntries, setJournalEntries] = useState<PlantJournalEntry[]>([]);
+  const [healthChecks, setHealthChecks] = useState<PlantHealthCheck[]>([]);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthDraft, setHealthDraft] = useState<HealthCheckDraft | null>(null);
+  const [journalTitle, setJournalTitle] = useState("");
+  const [journalNote, setJournalNote] = useState("");
+  const [savingJournal, setSavingJournal] = useState(false);
   const [message, setMessage] = useState<PageMessage | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -167,6 +206,8 @@ export default function PlantDetailPage() {
       { data: historyDataRaw },
       { data: sharesDataRaw },
       notesResult,
+      journalResult,
+      healthResult,
     ] = await Promise.all([
       supabase.from("plants").select("*").eq("id", plantId).single(),
       supabase
@@ -176,11 +217,23 @@ export default function PlantDetailPage() {
         .order("watered_at", { ascending: false }),
       supabase.from("plant_shares").select("plant_id, user_email").eq("plant_id", plantId),
       supabase.from("plant_notes").select("*").eq("plant_id", plantId).maybeSingle(),
+      supabase
+        .from("plant_journal_entries")
+        .select("*")
+        .eq("plant_id", plantId)
+        .order("observed_at", { ascending: false }),
+      supabase
+        .from("plant_health_checks")
+        .select("*")
+        .eq("plant_id", plantId)
+        .order("created_at", { ascending: false }),
     ]);
 
     const plantData = plantDataRaw as Plant | null;
     const historyData = (historyDataRaw || []) as WateringLog[];
     const sharesData = (sharesDataRaw || []) as PlantShare[];
+    const journalData = (journalResult.data || []) as PlantJournalEntry[];
+    const healthData = (healthResult.data || []) as PlantHealthCheck[];
 
     if (!plantData) {
       router.push("/");
@@ -190,6 +243,8 @@ export default function PlantDetailPage() {
     setPlant(plantData);
     setHistory(historyData);
     setSharedWith(sharesData);
+    setJournalEntries(journalData);
+    setHealthChecks(healthData);
     setForm({
       customName: plantData.custom_name || "",
       city: plantData.city || "",
@@ -244,6 +299,12 @@ export default function PlantDetailPage() {
           repotted_at: notes.repottedAt || null,
           leaf_status: notes.leafStatus.trim() || null,
           fertilizer_added_at: notes.fertilizerAddedAt || null,
+          location_label: notes.locationLabel.trim() || null,
+          pot_size: notes.potSize.trim() || null,
+          substrate_type: notes.substrateType.trim() || null,
+          purchase_date: notes.purchaseDate || null,
+          pets_present: notes.petsPresent,
+          children_present: notes.childrenPresent,
           updated_by: user?.id ?? null,
         },
         { onConflict: "plant_id" }
@@ -330,6 +391,122 @@ export default function PlantDetailPage() {
       });
     } finally {
       setIdentifyingImage(false);
+    }
+  };
+
+  const runHealthCheck = async () => {
+    if (!plantId) return;
+
+    const imageDataUrl = newImageFile ? await readFileAsDataUrl(newImageFile) : null;
+    const imageUrl = !newImageFile ? plant?.image_url || null : null;
+
+    if (!imageDataUrl && !imageUrl) {
+      setMessage({
+        type: "error",
+        text: "Ajoute ou conserve une photo avant de lancer le diagnostic sante.",
+      });
+      return;
+    }
+
+    try {
+      setHealthLoading(true);
+      setMessage(null);
+
+      const res = await fetch("/api/plants/health-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(imageDataUrl ? { imageDataUrl } : {}),
+          ...(imageUrl ? { imageUrl } : {}),
+        }),
+      });
+
+      const data = (await res.json()) as { error?: string } & HealthCheckDraft;
+
+      if (!res.ok) {
+        throw new Error(data.error || "Diagnostic impossible");
+      }
+
+      setHealthDraft(data);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const persistedImageUrl =
+        imageUrl ||
+        (newImageFile && user ? await uploadPlantImage(newImageFile, user.id) : null);
+
+      await supabase.from("plant_health_checks").insert({
+        plant_id: plantId,
+        created_by: user?.id ?? null,
+        image_url: persistedImageUrl,
+        summary: data.summary,
+        urgency: data.urgency,
+        likely_cause: data.likely_cause,
+        recommendations: data.recommendations,
+      });
+
+      await loadData();
+      setMessage({
+        type: "success",
+        text: "Diagnostic sante enregistre. Tu peux suivre son evolution dans cette fiche.",
+      });
+    } catch (error: unknown) {
+      setMessage({
+        type: "error",
+        text: getErrorMessage(error, "Impossible de lancer le diagnostic sante"),
+      });
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  const saveJournalEntry = async () => {
+    if (!plantId) return;
+
+    if (!journalTitle.trim() && !journalNote.trim() && !newImageFile) {
+      setMessage({
+        type: "error",
+        text: "Ajoute au moins un titre, une note ou une photo pour creer une entree.",
+      });
+      return;
+    }
+
+    try {
+      setSavingJournal(true);
+      setMessage(null);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const imageUrl = newImageFile && user ? await uploadPlantImage(newImageFile, user.id) : null;
+
+      await supabase.from("plant_journal_entries").insert({
+        plant_id: plantId,
+        author_id: user?.id ?? null,
+        entry_type: imageUrl ? "photo" : "note",
+        title: journalTitle.trim() || null,
+        note: journalNote.trim() || null,
+        image_url: imageUrl,
+      });
+
+      setJournalTitle("");
+      setJournalNote("");
+      setNewImageFile(null);
+      await loadData();
+      setMessage({
+        type: "success",
+        text: "Entree ajoutee au journal de la plante.",
+      });
+    } catch (error: unknown) {
+      setMessage({
+        type: "error",
+        text: getErrorMessage(error, "Impossible d'ajouter l'entree au journal"),
+      });
+    } finally {
+      setSavingJournal(false);
     }
   };
 
@@ -901,6 +1078,13 @@ export default function PlantDetailPage() {
             </button>
             <button
               type="button"
+              onClick={() => setActiveTab("health")}
+              className={activeTab === "health" ? "btn-primary" : "btn-secondary"}
+            >
+              Sante
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab("journal")}
               className={activeTab === "journal" ? "btn-primary" : "btn-secondary"}
             >
@@ -954,6 +1138,67 @@ export default function PlantDetailPage() {
             </div>
           )}
 
+          {activeTab === "health" && (
+            <div className="mb-8 space-y-6">
+              <div className="soft-card p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="eyebrow mb-2">Diagnostic IA</p>
+                    <h2 className="section-title !mb-0">Comment va la plante ?</h2>
+                    <p className="subtle-text mt-2 text-sm">
+                      Analyse une photo pour detecter les signes visibles de stress, puis garde
+                      l&apos;historique des diagnostics.
+                    </p>
+                  </div>
+
+                  <button onClick={runHealthCheck} disabled={healthLoading} className="btn-secondary">
+                    {healthLoading ? "Analyse..." : "Lancer un diagnostic"}
+                  </button>
+                </div>
+              </div>
+
+              {healthDraft && (
+                <div className="care-profile-card">
+                  <p className="eyebrow mb-2">Dernier diagnostic</p>
+                  <p className="text-xl font-black text-[#183624]">{healthDraft.summary}</p>
+                  <p className="subtle-text mt-2 text-sm">
+                    Cause probable : {healthDraft.likely_cause}
+                  </p>
+                  <div className="pill-row mt-4">
+                    <span className="pill">Urgence {healthDraft.urgency}</span>
+                    {healthDraft.recommendations.map((item) => (
+                      <span key={item} className="pill">{item}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {healthChecks.length === 0 ? (
+                  <div className="soft-card center-empty">
+                    Aucun diagnostic sante enregistre pour le moment.
+                  </div>
+                ) : (
+                  healthChecks.map((check) => (
+                    <div key={check.id} className="history-item">
+                      <div>
+                        <p className="font-extrabold text-[#183624]">{check.summary}</p>
+                        <p className="history-date">
+                          {formatFullDate(check.created_at)} • Urgence {check.urgency}
+                        </p>
+                        {check.likely_cause && (
+                          <p className="subtle-text mt-2 text-sm">
+                            Cause probable : {check.likely_cause}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === "overview" && selectedCareProfile && (
             <div className="care-profile-card mb-8">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -981,6 +1226,9 @@ export default function PlantDetailPage() {
                 <span className="pill">{getPetSafetyLabel(selectedCareProfile.petSafety)}</span>
                 <span className="pill">{getDifficultyLabel(selectedCareProfile.difficulty)}</span>
               </div>
+              <p className="subtle-text mt-4 text-sm">
+                Saison : {selectedCareProfile.seasonalTip}
+              </p>
             </div>
           )}
 
@@ -1280,6 +1528,84 @@ export default function PlantDetailPage() {
         {activeTab === "journal" && (
           <>
         <section className="soft-card mb-6 p-6 md:p-8">
+          <p className="eyebrow mb-3">Journal visuel</p>
+          <h2 className="section-title mb-5">Photos et observations</h2>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="field">
+              <label className="field-label">Titre</label>
+              <input
+                value={journalTitle}
+                onChange={(event) => setJournalTitle(event.target.value)}
+                className="input-elegant"
+                placeholder="Ex: Nouvelles pousses"
+              />
+            </div>
+
+            <div className="field">
+              <label className="field-label">Photo optionnelle</label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(event) => setNewImageFile(event.target.files?.[0] || null)}
+                className="input-elegant"
+              />
+            </div>
+          </div>
+
+          <div className="field mt-4">
+            <label className="field-label">Observation</label>
+            <textarea
+              value={journalNote}
+              onChange={(event) => setJournalNote(event.target.value)}
+              className="textarea-elegant"
+              placeholder="Ex: feuilles plus fermes, terre seche, apparition d'une fleur..."
+            />
+          </div>
+
+          <div className="mt-5">
+            <button onClick={saveJournalEntry} disabled={savingJournal} className="btn-secondary">
+              {savingJournal ? "Ajout..." : "Ajouter au journal"}
+            </button>
+          </div>
+        </section>
+
+        <section className="soft-card mb-6 p-6 md:p-8">
+          <p className="eyebrow mb-3">Chronologie</p>
+          <h2 className="section-title mb-5">Suivi dans le temps</h2>
+
+          <div className="space-y-3">
+            {journalEntries.length === 0 ? (
+              <div className="center-empty soft-card">
+                Aucune entree visuelle pour le moment.
+              </div>
+            ) : (
+              journalEntries.map((entry) => (
+                <div key={entry.id} className="history-item">
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-[#183624]">
+                      {entry.title || "Observation"}
+                    </p>
+                    <p className="history-date">{formatFullDate(entry.observed_at)}</p>
+                    {entry.note && <p className="subtle-text mt-2 text-sm">{entry.note}</p>}
+                  </div>
+                  {entry.image_url ? (
+                    <Image
+                      src={entry.image_url}
+                      alt={entry.title || "Photo du journal"}
+                      width={120}
+                      height={120}
+                      className="h-20 w-20 rounded-[18px] object-cover"
+                    />
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="soft-card mb-6 p-6 md:p-8">
           <p className="eyebrow mb-3">Notes</p>
           <h2 className="section-title mb-5">Suivi pratique de la plante</h2>
 
@@ -1309,6 +1635,54 @@ export default function PlantDetailPage() {
                     className="input-elegant"
                   />
                 </div>
+
+                <div className="field">
+                  <label className="field-label">Emplacement</label>
+                  <input
+                    value={notes.locationLabel}
+                    onChange={(event) =>
+                      setNotes({ ...notes, locationLabel: event.target.value })
+                    }
+                    className="input-elegant"
+                    placeholder="Ex: salon, balcon, chambre"
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="field-label">Taille du pot</label>
+                  <input
+                    value={notes.potSize}
+                    onChange={(event) =>
+                      setNotes({ ...notes, potSize: event.target.value })
+                    }
+                    className="input-elegant"
+                    placeholder="Ex: 18 cm"
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="field-label">Substrat</label>
+                  <input
+                    value={notes.substrateType}
+                    onChange={(event) =>
+                      setNotes({ ...notes, substrateType: event.target.value })
+                    }
+                    className="input-elegant"
+                    placeholder="Ex: terreau universel, melange drainant"
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="field-label">Date d&apos;achat</label>
+                  <input
+                    type="date"
+                    value={notes.purchaseDate}
+                    onChange={(event) =>
+                      setNotes({ ...notes, purchaseDate: event.target.value })
+                    }
+                    className="input-elegant"
+                  />
+                </div>
               </div>
 
               <div className="field mt-4">
@@ -1321,6 +1695,40 @@ export default function PlantDetailPage() {
                   className="textarea-elegant"
                   placeholder="Ex: feuilles jaunes, nouvelles pousses, terre tres seche..."
                 />
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={notes.petsPresent}
+                    onChange={(event) =>
+                      setNotes({ ...notes, petsPresent: event.target.checked })
+                    }
+                    className="checkbox-elegant"
+                  />
+                  <div>
+                    <p className="text-[0.95rem] font-extrabold text-[#183624]">
+                      Animaux a la maison
+                    </p>
+                  </div>
+                </label>
+
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={notes.childrenPresent}
+                    onChange={(event) =>
+                      setNotes({ ...notes, childrenPresent: event.target.checked })
+                    }
+                    className="checkbox-elegant"
+                  />
+                  <div>
+                    <p className="text-[0.95rem] font-extrabold text-[#183624]">
+                      Enfants a la maison
+                    </p>
+                  </div>
+                </label>
               </div>
 
               <div className="mt-5 flex items-center justify-between gap-3">

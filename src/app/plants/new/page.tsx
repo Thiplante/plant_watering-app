@@ -434,6 +434,9 @@ export default function NewPlantPage() {
                     <span className="pill">{getPetSafetyLabel(selectedCareProfile.petSafety)}</span>
                     <span className="pill">{getDifficultyLabel(selectedCareProfile.difficulty)}</span>
                   </div>
+                  <p className="subtle-text mt-4 text-sm">
+                    Saison : {selectedCareProfile.seasonalTip}
+                  </p>
                 </div>
               )}
             </section>
