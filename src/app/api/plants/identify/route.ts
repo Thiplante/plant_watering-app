@@ -8,6 +8,18 @@ type IdentifyResponse = {
   suggestions: PlantIdentificationOption[];
 };
 
+type OpenAIResponsePayload = {
+  error?: { message?: string };
+  output_text?: string;
+  output?: Array<{
+    type?: string;
+    content?: Array<{
+      type?: string;
+      text?: string;
+    }>;
+  }>;
+};
+
 function isIdentifyResponse(value: unknown): value is IdentifyResponse {
   if (!value || typeof value !== "object") return false;
 
@@ -24,6 +36,22 @@ function isIdentifyResponse(value: unknown): value is IdentifyResponse {
         typeof item.reason === "string"
     )
   );
+}
+
+function extractStructuredText(data: OpenAIResponsePayload): string | null {
+  if (typeof data.output_text === "string" && data.output_text.trim()) {
+    return data.output_text;
+  }
+
+  for (const outputItem of data.output ?? []) {
+    for (const contentItem of outputItem.content ?? []) {
+      if (contentItem.type === "output_text" && typeof contentItem.text === "string") {
+        return contentItem.text;
+      }
+    }
+  }
+
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -120,10 +148,7 @@ export async function POST(req: NextRequest) {
       }),
     });
 
-    const data = (await response.json()) as {
-      error?: { message?: string };
-      output_text?: string;
-    };
+    const data = (await response.json()) as OpenAIResponsePayload;
 
     if (!response.ok) {
       return NextResponse.json(
@@ -132,7 +157,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const parsed = data.output_text ? JSON.parse(data.output_text) : null;
+    const structuredText = extractStructuredText(data);
+    const parsed = structuredText ? JSON.parse(structuredText) : null;
 
     if (!isIdentifyResponse(parsed)) {
       return NextResponse.json(
