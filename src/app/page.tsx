@@ -595,9 +595,9 @@ export default function HomePage() {
         <div className="topbar-blur mb-6 p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="hero-title">Dashboard intelligent</h1>
+              <h1 className="hero-title">Mes plantes</h1>
               <p className="subtle-text mt-2">
-                Les priorites, les rappels et la meteo sont reunis ici pour agir sans hesitation.
+                L&apos;essentiel pour savoir quoi arroser maintenant, et quoi laisser tranquille.
               </p>
             </div>
 
@@ -607,42 +607,34 @@ export default function HomePage() {
           </div>
         </div>
 
-        <section className="mb-6 grid gap-4 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
-          <div className="glass-card p-6">
-            <p className="eyebrow mb-3">Priorite du jour</p>
-            <h2 className="section-title !mb-0">Que faire maintenant ?</h2>
-            <p className="mt-3 text-base font-semibold text-[#183624]">{priorityLabel}</p>
-            <p className="subtle-text mt-3 text-sm">
-              Commence par la colonne &quot;En retard&quot;, puis verifie les plantes prevues aujourd&apos;hui.
-            </p>
-          </div>
+        <section className="glass-card mb-6 p-6">
+          <p className="eyebrow mb-3">Aujourd&apos;hui</p>
+          <h2 className="section-title !mb-0">Que faire maintenant ?</h2>
+          <p className="mt-3 text-base font-semibold text-[#183624]">{priorityLabel}</p>
 
-          <div className="soft-card p-6">
-            <p className="eyebrow mb-2">En retard</p>
-            <p className="text-4xl font-black text-[#183624]">{overdue.length}</p>
-            <p className="subtle-text mt-2 text-sm">A arroser en priorite</p>
-          </div>
-
-          <div className="soft-card p-6">
-            <p className="eyebrow mb-2">Aujourd&apos;hui</p>
-            <p className="text-4xl font-black text-[#183624]">{today.length}</p>
-            <p className="subtle-text mt-2 text-sm">A verifier aujourd&apos;hui</p>
-          </div>
-
-          <div className="soft-card p-6">
-            <p className="eyebrow mb-2">Total</p>
-            <p className="text-4xl font-black text-[#183624]">{plants.length}</p>
-            <p className="subtle-text mt-2 text-sm">Plantes suivies</p>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="status-card">
+              <span className="status-label">En retard</span>
+              <span className="status-value">{overdue.length}</span>
+            </div>
+            <div className="status-card">
+              <span className="status-label">A verifier</span>
+              <span className="status-value">{today.length}</span>
+            </div>
+            <div className="status-card">
+              <span className="status-label">Total</span>
+              <span className="status-value">{plants.length}</span>
+            </div>
           </div>
         </section>
 
         <section className="glass-card mb-6 p-6">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="eyebrow mb-2">Pilotage premium</p>
-              <h2 className="section-title !mb-0">Recherche et tri intelligents</h2>
+              <p className="eyebrow mb-2">Filtres</p>
+              <h2 className="section-title !mb-0">Trouver rapidement une plante</h2>
               <p className="subtle-text mt-2 text-sm">
-                Retrouve plus vite les plantes a risque, les profils enrichis et les urgences.
+                Recherche, filtre et tri sans surcharger l&apos;ecran principal.
               </p>
             </div>
 
@@ -698,10 +690,10 @@ export default function HomePage() {
         <section className="glass-card mb-10 p-6 md:p-8">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="eyebrow mb-2">Notifications</p>
-              <h2 className="section-title !mb-0">Centre d&apos;attention</h2>
+              <p className="eyebrow mb-2">Rappels</p>
+              <h2 className="section-title !mb-0">A faire</h2>
               <p className="subtle-text mt-2 text-sm">
-                Les alertes importantes apparaissent ici pour eviter les oublis.
+                Les rappels prioritaires sont regroupes ici.
               </p>
             </div>
 
@@ -766,21 +758,21 @@ export default function HomePage() {
 
         <Section
           title="En retard"
-          subtitle="Ce sont les plantes les plus urgentes. Un arrosage maintenant reduit le risque d'oubli."
+          subtitle="A traiter en premier."
           plants={overdueFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}
         />
         <Section
           title="A arroser aujourd'hui"
-          subtitle="Ces plantes arrivent a leur tour. Verifie la terre et arrose si besoin."
+          subtitle="A verifier aujourd&apos;hui."
           plants={todayFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}
         />
         <Section
-          title="Tout va bien"
-          subtitle="Aucune action immediate. Tu peux simplement garder un oeil sur les conseils meteo."
+          title="Stable"
+          subtitle="Aucune action immediate."
           plants={normalFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}

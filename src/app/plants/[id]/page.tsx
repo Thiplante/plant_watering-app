@@ -81,7 +81,7 @@ type ConfirmState =
   | { kind: "remove-share"; email: string }
   | null;
 
-type DetailTab = "overview" | "weather";
+type DetailTab = "overview" | "weather" | "journal" | "settings";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -913,7 +913,7 @@ export default function PlantDetailPage() {
               onClick={() => setActiveTab("overview")}
               className={activeTab === "overview" ? "btn-primary" : "btn-secondary"}
             >
-              Vue d&apos;ensemble
+              Apercu
             </button>
             <button
               type="button"
@@ -921,6 +921,20 @@ export default function PlantDetailPage() {
               className={activeTab === "weather" ? "btn-primary" : "btn-secondary"}
             >
               Meteo
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("journal")}
+              className={activeTab === "journal" ? "btn-primary" : "btn-secondary"}
+            >
+              Journal
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className={activeTab === "settings" ? "btn-primary" : "btn-secondary"}
+            >
+              Reglages
             </button>
           </div>
 
@@ -1116,6 +1130,34 @@ export default function PlantDetailPage() {
             )}
           </div>
 
+          <div className="soft-card mb-6 p-5">
+            <p className="eyebrow mb-3">Identification</p>
+            {selectedIdentification ? (
+              <div className="identification-hero">
+                <p className="identification-hero-title">
+                  {selectedIdentification.common_name}
+                </p>
+                <p className="subtle-text text-sm italic">
+                  {selectedIdentification.scientific_name || "Nom scientifique non renseigne"}
+                </p>
+                {selectedIdentification.confidence > 0 && (
+                  <p className="mt-3 text-sm font-semibold text-[#425345]">
+                    Confiance actuelle: {selectedIdentification.confidence}% (
+                    {getConfidenceLabel(selectedIdentification.confidence).toLowerCase()})
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="subtle-text text-sm">
+                Aucune identification enregistree pour le moment.
+              </p>
+            )}
+          </div>
+            </>
+          )}
+
+          {activeTab === "settings" && (
+            <>
           <div className="mb-6 grid-elegant-2">
             <div className="field">
               <label className="field-label">Nom personnel optionnel</label>
@@ -1258,6 +1300,8 @@ export default function PlantDetailPage() {
           )}
         </section>
 
+        {activeTab === "journal" && (
+          <>
         <section className="soft-card mb-6 p-6 md:p-8">
           <p className="eyebrow mb-3">Notes</p>
           <h2 className="section-title mb-5">Suivi pratique de la plante</h2>
@@ -1317,50 +1361,6 @@ export default function PlantDetailPage() {
               ajoutee dans le repo pour activer cette fonction.
             </div>
           )}
-        </section>
-
-        <section className="soft-card mb-6 p-6 md:p-8">
-          <p className="eyebrow mb-3">Partage</p>
-          <h2 className="section-title mb-5">Acces et collaboration</h2>
-
-          <div className="mb-5 flex flex-col gap-3 md:flex-row">
-            <input
-              type="email"
-              placeholder="ami@mail.com"
-              value={shareEmail}
-              onChange={(event) => setShareEmail(event.target.value)}
-              className="input-elegant"
-            />
-            <button onClick={handleShare} className="btn-secondary whitespace-nowrap">
-              Inviter un proche
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {sharedWith.length === 0 ? (
-              <div className="rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-white/80 px-5 py-4 text-sm font-semibold text-[#4e6052]">
-                Aucun acces partage pour le moment.
-              </div>
-            ) : (
-              sharedWith.map((share) => (
-                <div key={share.user_email} className="history-item">
-                  <div>
-                    <p className="font-extrabold text-[#183624]">{share.user_email}</p>
-                    <p className="history-date">Acces collaboratif actif</p>
-                  </div>
-
-                  <button
-                    onClick={() =>
-                      setConfirmState({ kind: "remove-share", email: share.user_email })
-                    }
-                    className="btn-secondary"
-                  >
-                    Retirer l&apos;acces
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
         </section>
 
         <section className="soft-card p-6 md:p-8">
@@ -1427,6 +1427,54 @@ export default function PlantDetailPage() {
             )}
           </div>
         </section>
+          </>
+        )}
+
+        {activeTab === "settings" && (
+          <section className="soft-card mb-6 p-6 md:p-8">
+          <p className="eyebrow mb-3">Partage</p>
+          <h2 className="section-title mb-5">Acces et collaboration</h2>
+
+          <div className="mb-5 flex flex-col gap-3 md:flex-row">
+            <input
+              type="email"
+              placeholder="ami@mail.com"
+              value={shareEmail}
+              onChange={(event) => setShareEmail(event.target.value)}
+              className="input-elegant"
+            />
+            <button onClick={handleShare} className="btn-secondary whitespace-nowrap">
+              Inviter un proche
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {sharedWith.length === 0 ? (
+              <div className="rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-white/80 px-5 py-4 text-sm font-semibold text-[#4e6052]">
+                Aucun acces partage pour le moment.
+              </div>
+            ) : (
+              sharedWith.map((share) => (
+                <div key={share.user_email} className="history-item">
+                  <div>
+                    <p className="font-extrabold text-[#183624]">{share.user_email}</p>
+                    <p className="history-date">Acces collaboratif actif</p>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      setConfirmState({ kind: "remove-share", email: share.user_email })
+                    }
+                    className="btn-secondary"
+                  >
+                    Retirer l&apos;acces
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+        )}
       </div>
 
       {confirmContent && (
