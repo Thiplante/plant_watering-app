@@ -498,6 +498,128 @@ textarea {
   color: #365042;
 }
 
+.identification-panel {
+  border-radius: 28px;
+  border: 1px solid rgba(35, 75, 52, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 248, 244, 0.9) 100%);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.identification-option {
+  width: 100%;
+  border: 1px solid rgba(35, 75, 52, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 18px 18px 16px;
+  text-align: left;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.identification-option:hover {
+  transform: translateY(-1px);
+  border-color: rgba(35, 75, 52, 0.16);
+  box-shadow: 0 14px 32px rgba(20, 32, 24, 0.08);
+}
+
+.identification-option.is-selected {
+  border-color: rgba(35, 75, 52, 0.26);
+  background: linear-gradient(180deg, #f4faf4 0%, #eaf4ec 100%);
+  box-shadow: 0 18px 36px rgba(35, 75, 52, 0.12);
+}
+
+.selection-chip,
+.confidence-chip,
+.selected-callout-label {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.selection-chip {
+  background: rgba(35, 75, 52, 0.12);
+  color: #234b34;
+  padding: 6px 10px;
+}
+
+.confidence-chip {
+  padding: 8px 12px;
+}
+
+.confidence-high {
+  background: #e7f7ec;
+  color: #1d6b3c;
+}
+
+.confidence-medium {
+  background: #edf5e7;
+  color: #496a24;
+}
+
+.confidence-watch {
+  background: #fff4de;
+  color: #99621d;
+}
+
+.confidence-low {
+  background: #fdeaea;
+  color: #9b3c3c;
+}
+
+.confidence-bar {
+  width: 132px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(35, 75, 52, 0.08);
+}
+
+.confidence-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #84c98f 0%, #2f6646 100%);
+}
+
+.selected-callout {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 140px;
+  border-radius: 20px;
+  border: 1px solid rgba(35, 75, 52, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 12px 14px;
+  color: #183624;
+}
+
+.selected-callout-label {
+  color: var(--muted);
+}
+
+.identification-hero {
+  border-radius: 28px;
+  border: 1px solid rgba(35, 75, 52, 0.08);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(236, 244, 238, 0.94) 100%);
+  padding: 18px 20px;
+}
+
+.identification-hero-title {
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: #183624;
+}
+
 .grid-elegant {
   display: grid;
   gap: 24px;

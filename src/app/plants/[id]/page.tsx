@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
+import IdentificationOptions from "@/components/plants/IdentificationOptions";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
 import {
   getPlantDisplayName,
   getPlantIdentitySubtitle,
+  getConfidenceLabel,
   type PlantIdentificationOption,
 } from "@/lib/plants/identity";
 import { uploadPlantImage } from "@/lib/plants/images";
@@ -979,54 +981,33 @@ export default function PlantDetailPage() {
               <p className="eyebrow mb-3">Identification</p>
               <div className="space-y-3">
                 {selectedIdentification && (
-                  <div className="rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-white px-4 py-4">
-                    <p className="font-black text-[#183624]">
+                  <div className="identification-hero">
+                    <p className="identification-hero-title">
                       {selectedIdentification.common_name}
                     </p>
-                    <p className="subtle-text text-sm">
+                    <p className="subtle-text text-sm italic">
                       {selectedIdentification.scientific_name || "Nom scientifique non renseigne"}
                     </p>
                     {selectedIdentification.confidence > 0 && (
-                      <p className="mt-2 text-sm font-semibold text-[#425345]">
-                        Confiance estimee: {selectedIdentification.confidence}%
+                      <p className="mt-3 text-sm font-semibold text-[#425345]">
+                        Confiance actuelle: {selectedIdentification.confidence}% (
+                        {getConfidenceLabel(selectedIdentification.confidence).toLowerCase()})
                       </p>
                     )}
+                    <p className="subtle-text mt-2 text-sm">
+                      Cette identification sera enregistree comme reference principale pour cette
+                      plante.
+                    </p>
                   </div>
                 )}
 
-                {identificationOptions.length > 0 && (
-                  <div className="grid gap-3">
-                    {identificationOptions.map((option) => {
-                      const selected =
-                        selectedIdentification?.common_name === option.common_name &&
-                        selectedIdentification?.scientific_name === option.scientific_name;
-
-                      return (
-                        <button
-                          key={`${option.common_name}-${option.scientific_name}`}
-                          type="button"
-                          onClick={() => setSelectedIdentification(option)}
-                          className={`rounded-[24px] border px-4 py-4 text-left transition ${
-                            selected
-                              ? "border-[#2f6646] bg-[#edf4ee]"
-                              : "border-[rgba(35,75,52,0.08)] bg-white hover:border-[rgba(35,75,52,0.18)]"
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="font-black text-[#183624]">{option.common_name}</p>
-                              <p className="subtle-text text-sm">{option.scientific_name}</p>
-                            </div>
-                            <span className="pill">{option.confidence}% probable</span>
-                          </div>
-                          <p className="mt-3 text-sm font-semibold text-[#425345]">
-                            {option.reason}
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                <IdentificationOptions
+                  title="Choix disponibles"
+                  summary="Tu peux conserver l'identification actuelle ou choisir une autre proposition si elle correspond mieux a la plante."
+                  options={identificationOptions}
+                  selectedOption={selectedIdentification}
+                  onSelect={setSelectedIdentification}
+                />
               </div>
             </div>
           )}

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import IdentificationOptions from "@/components/plants/IdentificationOptions";
 import { supabase } from "@/lib/supabase";
 import { uploadPlantImage, readFileAsDataUrl } from "@/lib/plants/images";
 import type { PlantIdentificationOption } from "@/lib/plants/identity";
@@ -301,44 +302,12 @@ export default function NewPlantPage() {
                 )}
 
                 {identificationOptions.length > 0 && (
-                  <div className="rounded-[28px] border border-[rgba(35,75,52,0.08)] bg-white/80 p-5">
-                    <p className="field-label mb-3">Propositions</p>
-                    {identificationSummary && (
-                      <p className="subtle-text mb-4 text-sm">{identificationSummary}</p>
-                    )}
-
-                    <div className="grid gap-3">
-                      {identificationOptions.map((option) => {
-                        const selected =
-                          selectedIdentification?.common_name === option.common_name &&
-                          selectedIdentification?.scientific_name === option.scientific_name;
-
-                        return (
-                          <button
-                            key={`${option.common_name}-${option.scientific_name}`}
-                            type="button"
-                            onClick={() => setSelectedIdentification(option)}
-                            className={`rounded-[24px] border px-4 py-4 text-left transition ${
-                              selected
-                                ? "border-[#2f6646] bg-[#edf4ee]"
-                                : "border-[rgba(35,75,52,0.08)] bg-white hover:border-[rgba(35,75,52,0.18)]"
-                            }`}
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <p className="font-black text-[#183624]">{option.common_name}</p>
-                                <p className="subtle-text text-sm">{option.scientific_name}</p>
-                              </div>
-                              <span className="pill">{option.confidence}% probable</span>
-                            </div>
-                            <p className="mt-3 text-sm font-semibold text-[#425345]">
-                              {option.reason}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <IdentificationOptions
+                    summary={identificationSummary}
+                    options={identificationOptions}
+                    selectedOption={selectedIdentification}
+                    onSelect={setSelectedIdentification}
+                  />
                 )}
               </div>
             </section>
