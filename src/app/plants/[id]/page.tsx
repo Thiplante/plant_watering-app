@@ -13,7 +13,7 @@ import {
   getConfidenceLabel,
   type PlantIdentificationOption,
 } from "@/lib/plants/identity";
-import { uploadPlantImage } from "@/lib/plants/images";
+import { readFileAsDataUrl, uploadPlantImage } from "@/lib/plants/images";
 import {
   getAdaptiveWateringInsight,
   getHealthInsight,
@@ -122,6 +122,7 @@ export default function PlantDetailPage() {
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [updatingImage, setUpdatingImage] = useState(false);
+  const [identifyingImage, setIdentifyingImage] = useState(false);
   const [savingPlant, setSavingPlant] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesAvailable, setNotesAvailable] = useState(true);
@@ -135,6 +136,7 @@ export default function PlantDetailPage() {
   const [identificationOptions, setIdentificationOptions] = useState<
     PlantIdentificationOption[]
   >([]);
+  const [identificationSummary, setIdentificationSummary] = useState("");
 
   const [form, setForm] = useState<PlantForm>({
     customName: "",
@@ -199,6 +201,7 @@ export default function PlantDetailPage() {
       rain: Boolean(plantData.can_be_watered_by_rain),
     });
     setIdentificationOptions(plantData.identification_options || []);
+    setIdentificationSummary("");
     setSelectedIdentification(
       plantData.identified_name
         ? {
@@ -264,6 +267,62 @@ export default function PlantDetailPage() {
       });
     } finally {
       setSavingNotes(false);
+    }
+  };
+
+  const identifyPlantImage = async () => {
+    if (!plantId) return;
+
+    const imageDataUrl = newImageFile ? await readFileAsDataUrl(newImageFile) : null;
+    const imageUrl = !newImageFile ? plant?.image_url || null : null;
+
+    if (!imageDataUrl && !imageUrl) {
+      setMessage({
+        type: "error",
+        text: "Ajoute ou conserve une photo avant de lancer l'analyse IA.",
+      });
+      return;
+    }
+
+    try {
+      setIdentifyingImage(true);
+      setMessage(null);
+
+      const res = await fetch("/api/plants/identify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...(imageDataUrl ? { imageDataUrl } : {}),
+          ...(imageUrl ? { imageUrl } : {}),
+        }),
+      });
+
+      const data = (await res.json()) as {
+        error?: string;
+        summary?: string;
+        suggestions?: PlantIdentificationOption[];
+      };
+
+      if (!res.ok || !data.suggestions) {
+        throw new Error(data.error || "Impossible d'analyser cette photo");
+      }
+
+      setIdentificationSummary(data.summary || "");
+      setIdentificationOptions(data.suggestions);
+      setSelectedIdentification(data.suggestions[0] || null);
+      setMessage({
+        type: "success",
+        text: "Analyse terminee. Pense a enregistrer les reglages si cette identification te convient.",
+      });
+    } catch (error: unknown) {
+      setMessage({
+        type: "error",
+        text: getErrorMessage(error, "Impossible d'identifier la plante a partir de cette photo"),
+      });
+    } finally {
+      setIdentifyingImage(false);
     }
   };
 
@@ -851,6 +910,14 @@ export default function PlantDetailPage() {
                   {updatingImage ? "Upload..." : "Mettre a jour la photo"}
                 </button>
 
+                <button
+                  onClick={identifyPlantImage}
+                  disabled={identifyingImage || (!newImageFile && !plant.image_url)}
+                  className="btn-secondary"
+                >
+                  {identifyingImage ? "Analyse..." : "Relancer l'analyse IA"}
+                </button>
+
                 {plant.image_url && (
                   <button
                     onClick={() => setConfirmState({ kind: "remove-image" })}
@@ -976,7 +1043,7 @@ export default function PlantDetailPage() {
             </div>
           </div>
 
-          {(plant.identified_name || identificationOptions.length > 0) && (
+          {(plant.identified_name || identificationOptions.length > 0 || plant.image_url || newImageFile) && (
             <div className="soft-card mb-6 p-5">
               <p className="eyebrow mb-3">Identification</p>
               <div className="space-y-3">
@@ -1003,7 +1070,10 @@ export default function PlantDetailPage() {
 
                 <IdentificationOptions
                   title="Choix disponibles"
-                  summary="Tu peux conserver l'identification actuelle ou choisir une autre proposition si elle correspond mieux a la plante."
+                  summary={
+                    identificationSummary ||
+                    "Tu peux conserver l'identification actuelle ou choisir une autre proposition si elle correspond mieux a la plante."
+                  }
                   options={identificationOptions}
                   selectedOption={selectedIdentification}
                   onSelect={setSelectedIdentification}
