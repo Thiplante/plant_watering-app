@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
 import IdentificationOptions from "@/components/plants/IdentificationOptions";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
+import WeatherTimelinePanel from "@/components/plants/WeatherTimelinePanel";
 import {
   getPlantDisplayName,
   getPlantIdentitySubtitle,
@@ -80,6 +81,8 @@ type ConfirmState =
   | { kind: "remove-share"; email: string }
   | null;
 
+type DetailTab = "overview" | "weather";
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
@@ -138,6 +141,7 @@ export default function PlantDetailPage() {
   const [message, setMessage] = useState<PageMessage | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<DetailTab>("overview");
   const [selectedIdentification, setSelectedIdentification] =
     useState<PlantIdentificationOption | null>(null);
   const [identificationOptions, setIdentificationOptions] = useState<
@@ -903,7 +907,63 @@ export default function PlantDetailPage() {
             </div>
           </div>
 
-          {selectedCareProfile && (
+          <div className="mb-8 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab("overview")}
+              className={activeTab === "overview" ? "btn-primary" : "btn-secondary"}
+            >
+              Vue d&apos;ensemble
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("weather")}
+              className={activeTab === "weather" ? "btn-primary" : "btn-secondary"}
+            >
+              Meteo
+            </button>
+          </div>
+
+          {activeTab === "weather" && (
+            <div className="mb-8">
+              <div className="soft-card mb-6 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="eyebrow mb-2">Onglet meteo</p>
+                    <h2 className="section-title !mb-0">Historique et prevision</h2>
+                    <p className="subtle-text mt-2 text-sm">
+                      Visualise l&apos;evolution de la temperature, de l&apos;humidite et de la pluie
+                      sur la derniere semaine, puis la prevision sur 3 a 4 jours.
+                    </p>
+                  </div>
+
+                  <RefreshWeatherButton
+                    plantId={plant.id}
+                    onSuccess={() =>
+                      setMessage({
+                        type: "success",
+                        text: "Meteo actualisee. Les graphiques vont se rafraichir automatiquement.",
+                      })
+                    }
+                    onError={(errorMessage) =>
+                      setMessage({
+                        type: "error",
+                        text: errorMessage,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <WeatherTimelinePanel
+                plantId={plant.id}
+                city={plant.city}
+                weatherUpdatedAt={plant.weather_updated_at}
+              />
+            </div>
+          )}
+
+          {activeTab === "overview" && selectedCareProfile && (
             <div className="care-profile-card mb-8">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -933,6 +993,8 @@ export default function PlantDetailPage() {
             </div>
           )}
 
+          {activeTab === "overview" && (
+            <>
           <div className="mb-8">
             {previewUrl ? (
               <Image
@@ -1192,6 +1254,8 @@ export default function PlantDetailPage() {
               Supprimer la plante
             </button>
           </div>
+            </>
+          )}
         </section>
 
         <section className="soft-card mb-6 p-6 md:p-8">
