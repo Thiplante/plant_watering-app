@@ -4,26 +4,34 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getUserLocations } from "@/lib/locations";
 import { ensureProfile } from "@/lib/profiles";
-import type { Profile } from "@/lib/types";
+import type { PlantLocation, Profile } from "@/lib/types";
 
 export default function SettingsPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [locations, setLocations] = useState<PlantLocation[]>([]);
+  const [newLocationName, setNewLocationName] = useState("");
+  const [newLocationKind, setNewLocationKind] = useState("interieur");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
+    null
+  );
 
   useEffect(() => {
     const load = async () => {
-      const current = await ensureProfile();
+      const currentProfile = await ensureProfile();
 
-      if (!current) {
+      if (!currentProfile) {
         router.replace("/login");
         return;
       }
 
-      setProfile(current);
+      setProfile(currentProfile);
+      setLocations(await getUserLocations());
       setLoading(false);
     };
 
@@ -34,58 +42,153 @@ export default function SettingsPage() {
     event.preventDefault();
     if (!profile) return;
 
-    setSaving(true);
-    setMessage("");
-    await supabase
-      .from("profiles")
-      .upsert(
-        {
-          ...profile,
-          onboarding_completed: true,
-        },
-        { onConflict: "id" }
-      );
-    setSaving(false);
-    setMessage("Profil enregistre.");
+    try {
+      setSavingProfile(true);
+      setMessage(null);
+
+      const { error } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: profile.id,
+            email: profile.email,
+            display_name: profile.display_name?.trim() || null,
+            household_name: profile.household_name?.trim() || null,
+            experience_level: profile.experience_level || "debutant",
+            notification_opt_in: profile.notification_opt_in,
+            onboarding_completed: true,
+          },
+          { onConflict: "id" }
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage({ type: "success", text: "Profil enregistre." });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Impossible d'enregistrer le profil.",
+      });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleAddLocation = async () => {
+    if (!newLocationName.trim()) {
+      setMessage({ type: "error", text: "Ajoute un nom de lieu avant d'enregistrer." });
+      return;
+    }
+
+    try {
+      setSavingLocation(true);
+      setMessage(null);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      const { error } = await supabase.from("plant_locations").insert({
+        owner_id: user.id,
+        name: newLocationName.trim(),
+        kind: newLocationKind,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setLocations(await getUserLocations());
+      setNewLocationName("");
+      setMessage({ type: "success", text: "Lieu ajoute." });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Impossible d'ajouter ce lieu.",
+      });
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
+  const handleDeleteLocation = async (locationId: string) => {
+    try {
+      setMessage(null);
+      const { error } = await supabase.from("plant_locations").delete().eq("id", locationId);
+
+      if (error) {
+        throw error;
+      }
+
+      setLocations(await getUserLocations());
+      setMessage({ type: "success", text: "Lieu supprime." });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Impossible de supprimer ce lieu.",
+      });
+    }
   };
 
   if (loading || !profile) {
-    return <main className="page-shell"><div className="page-container-narrow"><div className="glass-card center-empty">Chargement...</div></div></main>;
+    return (
+      <main className="page-shell">
+        <div className="page-container-narrow">
+          <div className="glass-card center-empty">Chargement...</div>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="page-shell">
       <div className="page-container-narrow">
-        <Link href="/" className="btn-secondary">Retour</Link>
+        <Link href="/" className="btn-secondary">
+          Retour
+        </Link>
+
         <section className="glass-card mt-6 p-6 md:p-8">
           <p className="eyebrow mb-3">Profil</p>
           <h1 className="hero-title" style={{ fontSize: "clamp(2rem, 5vw, 3.4rem)" }}>
             Mon espace
           </h1>
           <p className="subtle-text mt-3">
-            Renseigne ton foyer et tes preferences pour rendre l&apos;application plus personnelle.
+            Un profil simple, puis des lieux clairs pour ranger les plantes par espace.
           </p>
+
+          {message ? (
+            <div
+              className={`feedback-banner mt-6 ${
+                message.type === "success" ? "feedback-success" : "feedback-error"
+              }`}
+            >
+              {message.text}
+            </div>
+          ) : null}
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             <div className="field">
               <label className="field-label">Nom visible</label>
               <input
                 value={profile.display_name || ""}
-                onChange={(event) =>
-                  setProfile({ ...profile, display_name: event.target.value })
-                }
+                onChange={(event) => setProfile({ ...profile, display_name: event.target.value })}
                 className="input-elegant"
                 placeholder="Ex: Thibaut"
               />
             </div>
 
             <div className="field">
-              <label className="field-label">Maison / balcon</label>
+              <label className="field-label">Maison / foyer</label>
               <input
                 value={profile.household_name || ""}
-                onChange={(event) =>
-                  setProfile({ ...profile, household_name: event.target.value })
-                }
+                onChange={(event) => setProfile({ ...profile, household_name: event.target.value })}
                 className="input-elegant"
                 placeholder="Ex: Appartement Paris"
               />
@@ -117,20 +220,73 @@ export default function SettingsPage() {
               />
               <div>
                 <p className="text-[0.95rem] font-extrabold text-[#183624]">
-                  Je veux recevoir des rappels
+                  Recevoir les rappels
                 </p>
                 <p className="subtle-text text-sm">
-                  Active les rappels dans le navigateur et futurement par email.
+                  Active les rappels navigateur et les futures alertes email.
                 </p>
               </div>
             </label>
 
-            {message ? <div className="feedback-banner feedback-success">{message}</div> : null}
-
-            <button type="submit" disabled={saving} className="btn-primary">
-              {saving ? "Enregistrement..." : "Enregistrer mon profil"}
+            <button type="submit" disabled={savingProfile} className="btn-primary">
+              {savingProfile ? "Enregistrement..." : "Enregistrer le profil"}
             </button>
           </form>
+        </section>
+
+        <section className="glass-card mt-6 p-6 md:p-8">
+          <p className="eyebrow mb-3">Lieux</p>
+          <h2 className="section-title !mb-0">Ou vivent tes plantes ?</h2>
+          <p className="subtle-text mt-3 text-sm">
+            Cree tes endroits une fois, puis attribue chaque plante a un lieu comme salon,
+            balcon, chambre ou veranda.
+          </p>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-[1.4fr_1fr_auto]">
+            <input
+              value={newLocationName}
+              onChange={(event) => setNewLocationName(event.target.value)}
+              className="input-elegant"
+              placeholder="Ex: Salon, Balcon, Bureau"
+            />
+
+            <select
+              value={newLocationKind}
+              onChange={(event) => setNewLocationKind(event.target.value)}
+              className="select-elegant"
+            >
+              <option value="interieur">Interieur</option>
+              <option value="exterieur">Exterieur</option>
+              <option value="serre">Serre</option>
+            </select>
+
+            <button onClick={handleAddLocation} disabled={savingLocation} className="btn-secondary">
+              {savingLocation ? "Ajout..." : "Ajouter"}
+            </button>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {locations.length === 0 ? (
+              <div className="soft-card center-empty">
+                Aucun lieu pour le moment. Commence par en creer un.
+              </div>
+            ) : (
+              locations.map((location) => (
+                <div key={location.id} className="history-item">
+                  <div>
+                    <p className="font-extrabold text-[#183624]">{location.name}</p>
+                    <p className="history-date">{location.kind || "Lieu"}</p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteLocation(location.id)}
+                    className="btn-secondary"
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </section>
       </div>
     </main>

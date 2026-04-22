@@ -1,6 +1,7 @@
 export type Plant = {
   id: string;
   owner_id: string;
+  location_id: string | null;
   name: string;
   custom_name: string | null;
   identified_name: string | null;
@@ -58,6 +59,15 @@ export type Profile = {
   experience_level: string | null;
   notification_opt_in: boolean;
   onboarding_completed: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type PlantLocation = {
+  id: string;
+  owner_id: string;
+  name: string;
+  kind: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };

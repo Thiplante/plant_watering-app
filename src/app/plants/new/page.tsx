@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import IdentificationOptions from "@/components/plants/IdentificationOptions";
+import { getUserLocations } from "@/lib/locations";
 import { supabase } from "@/lib/supabase";
 import { uploadPlantImage, readFileAsDataUrl } from "@/lib/plants/images";
 import type { PlantIdentificationOption } from "@/lib/plants/identity";
@@ -15,6 +16,7 @@ import {
   getRecommendedWateringDays,
 } from "@/lib/plants/profile";
 import { refreshPlantWeather } from "@/lib/weather/actions";
+import type { PlantLocation } from "@/lib/types";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -49,6 +51,8 @@ export default function NewPlantPage() {
   const [selectedIdentification, setSelectedIdentification] =
     useState<PlantIdentificationOption | null>(null);
   const [showIdentificationOptions, setShowIdentificationOptions] = useState(false);
+  const [locations, setLocations] = useState<PlantLocation[]>([]);
+  const [locationId, setLocationId] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -66,6 +70,7 @@ export default function NewPlantPage() {
         return;
       }
 
+      setLocations(await getUserLocations());
       setLoading(false);
     };
 
@@ -224,6 +229,7 @@ export default function NewPlantPage() {
           scientific_name: chosenIdentification?.scientific_name || null,
           identification_confidence: chosenIdentification?.confidence ?? null,
           identification_options: [],
+          location_id: locationId || null,
           watering_frequency_days: safeFrequency,
           city: city.trim(),
           exposure,
@@ -444,6 +450,25 @@ export default function NewPlantPage() {
             <section className="soft-card p-5 md:p-6">
               <p className="eyebrow mb-4">Rythme et contexte</p>
               <div className="grid gap-4 md:grid-cols-2">
+                <div className="field">
+                  <label htmlFor="location" className="field-label">
+                    Lieu
+                  </label>
+                  <select
+                    id="location"
+                    value={locationId}
+                    onChange={(event) => setLocationId(event.target.value)}
+                    className="select-elegant"
+                  >
+                    <option value="">Choisir un lieu plus tard</option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="field">
                   <label htmlFor="city" className="field-label">
                     Ville pour la meteo

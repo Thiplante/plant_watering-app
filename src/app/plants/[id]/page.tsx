@@ -27,11 +27,13 @@ import {
   getHealthInsight,
   getWeatherInsight,
 } from "@/lib/plants/insights";
+import { getUserLocations } from "@/lib/locations";
 import { supabase } from "@/lib/supabase";
 import type {
   Plant,
   PlantHealthCheck,
   PlantJournalEntry,
+  PlantLocation,
   PlantNote,
   PlantShare,
   WateringLog,
@@ -39,6 +41,7 @@ import type {
 
 type PlantForm = {
   customName: string;
+  locationId: string;
   city: string;
   exposure: string;
   frequency: number;
@@ -81,6 +84,7 @@ type PlantUpdatePayload = Pick<
   | "weather_advice"
   | "weather_score"
   | "weather_updated_at"
+  | "location_id"
 >;
 
 const EMPTY_NOTES: PlantNotesForm = {
@@ -142,6 +146,7 @@ export default function PlantDetailPage() {
   const [plant, setPlant] = useState<Plant | null>(null);
   const [history, setHistory] = useState<WateringLog[]>([]);
   const [sharedWith, setSharedWith] = useState<PlantShare[]>([]);
+  const [locations, setLocations] = useState<PlantLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareEmail, setShareEmail] = useState("");
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -176,6 +181,7 @@ export default function PlantDetailPage() {
 
   const [form, setForm] = useState<PlantForm>({
     customName: "",
+    locationId: "",
     city: "",
     exposure: "mi-ombre",
     frequency: 3,
@@ -243,10 +249,12 @@ export default function PlantDetailPage() {
     setPlant(plantData);
     setHistory(historyData);
     setSharedWith(sharesData);
+    setLocations(await getUserLocations());
     setJournalEntries(journalData);
     setHealthChecks(healthData);
     setForm({
       customName: plantData.custom_name || "",
+      locationId: plantData.location_id || "",
       city: plantData.city || "",
       exposure: plantData.exposure || "mi-ombre",
       frequency: plantData.watering_frequency_days || 3,
@@ -636,6 +644,7 @@ export default function PlantDetailPage() {
         identification_confidence:
           selectedIdentification?.confidence ?? plant?.identification_confidence ?? null,
         identification_options: [],
+        location_id: form.locationId || null,
         city: trimmedCity,
         exposure: form.exposure,
         watering_frequency_days: safeFrequency,
@@ -1393,6 +1402,22 @@ export default function PlantDetailPage() {
                 className="input-elegant"
                 placeholder="Ex: La grande du salon"
               />
+            </div>
+
+            <div className="field">
+              <label className="field-label">Lieu</label>
+              <select
+                value={form.locationId}
+                onChange={(event) => setForm({ ...form, locationId: event.target.value })}
+                className="select-elegant"
+              >
+                <option value="">Aucun lieu</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="field">

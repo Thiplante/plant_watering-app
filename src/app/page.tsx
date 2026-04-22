@@ -9,6 +9,7 @@ import {
   getPlantDisplayName,
   getPlantIdentitySubtitle,
 } from "@/lib/plants/identity";
+import { getUserLocations } from "@/lib/locations";
 import { buildNotificationDrafts } from "@/lib/plants/notifications";
 import {
   getCareProfileForPlant,
@@ -23,7 +24,7 @@ import {
 } from "@/lib/plants/insights";
 import { ensureProfile } from "@/lib/profiles";
 import { supabase } from "@/lib/supabase";
-import type { AppNotification, Plant, PlantShare, Profile } from "@/lib/types";
+import type { AppNotification, Plant, PlantLocation, PlantShare, Profile } from "@/lib/types";
 
 type PlantStatus = "unknown" | "overdue" | "today" | "ok";
 
@@ -48,6 +49,7 @@ type SectionProps = {
   plants: Plant[];
   onQuickWater: (event: React.MouseEvent<HTMLButtonElement>, plant: Plant) => void;
   getDates: (plant: Plant) => PlantDateInfo;
+  getLocationName: (plant: Plant) => string | null;
 };
 
 function toneClasses(tone: string) {
@@ -67,7 +69,7 @@ function toneClasses(tone: string) {
   }
 }
 
-function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionProps) {
+function Section({ title, subtitle, plants, onQuickWater, getDates, getLocationName }: SectionProps) {
   return (
     <section className="mb-10">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -114,6 +116,7 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
                   )}
 
                   <div className="pill-row mb-4">
+                    {getLocationName(plant) && <span className="pill">{getLocationName(plant)}</span>}
                     <span className="pill">{plant.city || "Ville inconnue"}</span>
                     {careProfile && <span className="pill">{getDifficultyLabel(careProfile.difficulty)}</span>}
                   </div>
@@ -186,9 +189,11 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<HomeMessage | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [locations, setLocations] = useState<PlantLocation[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [sortMode, setSortMode] = useState<SortMode>("urgency");
+  const [locationFilter, setLocationFilter] = useState("all");
   const router = useRouter();
 
   const syncNotifications = useCallback(
@@ -263,6 +268,7 @@ export default function HomePage() {
     setUserId(user.id);
     const currentProfile = await ensureProfile();
     setProfile(currentProfile);
+    setLocations(await getUserLocations());
 
     const { data: myPlantsData } = await supabase
       .from("plants")
@@ -513,6 +519,7 @@ export default function HomePage() {
   const heatSensitiveCount = plants.filter(
     (plant) => getWeatherInsight(plant).tone === "heat"
   ).length;
+  const locationMap = new Map(locations.map((location) => [location.id, location.name]));
   const searchTerm = searchQuery.trim().toLowerCase();
 
   const filteredPlants = plants
@@ -529,6 +536,10 @@ export default function HomePage() {
         .join(" ")
         .toLowerCase()
         .includes(searchTerm);
+    })
+    .filter((plant) => {
+      if (locationFilter === "all") return true;
+      return plant.location_id === locationFilter;
     })
     .filter((plant) => {
       if (filterMode === "all") return true;
@@ -647,7 +658,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_1fr]">
+          <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
             <input
               type="text"
               value={searchQuery}
@@ -666,6 +677,19 @@ export default function HomePage() {
               <option value="today">A verifier aujourd&apos;hui</option>
               <option value="safe">Profils enrichis</option>
               <option value="watch">A surveiller</option>
+            </select>
+
+            <select
+              value={locationFilter}
+              onChange={(event) => setLocationFilter(event.target.value)}
+              className="select-elegant"
+            >
+              <option value="all">Tous les lieux</option>
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
             </select>
 
             <select
@@ -765,6 +789,9 @@ export default function HomePage() {
           plants={overdueFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}
+          getLocationName={(plant) =>
+            plant.location_id ? locationMap.get(plant.location_id) || null : null
+          }
         />
         <Section
           title="A arroser aujourd'hui"
@@ -772,6 +799,9 @@ export default function HomePage() {
           plants={todayFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}
+          getLocationName={(plant) =>
+            plant.location_id ? locationMap.get(plant.location_id) || null : null
+          }
         />
         <Section
           title="Stable"
@@ -779,6 +809,9 @@ export default function HomePage() {
           plants={normalFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}
+          getLocationName={(plant) =>
+            plant.location_id ? locationMap.get(plant.location_id) || null : null
+          }
         />
       </div>
     </main>
