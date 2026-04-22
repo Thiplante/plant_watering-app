@@ -10,6 +10,11 @@ import {
 } from "@/lib/plants/identity";
 import { buildNotificationDrafts } from "@/lib/plants/notifications";
 import {
+  getCareProfileForPlant,
+  getDifficultyLabel,
+  getPetSafetyLabel,
+} from "@/lib/plants/profile";
+import {
   getAdaptiveWateringInsight,
   getDashboardNotifications,
   getHealthInsight,
@@ -31,6 +36,9 @@ type HomeMessage = {
   type: "success" | "error";
   text: string;
 };
+
+type FilterMode = "all" | "overdue" | "today" | "safe" | "watch";
+type SortMode = "urgency" | "name" | "recent";
 
 type SectionProps = {
   title: string;
@@ -78,6 +86,7 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
             const weatherInsight = getWeatherInsight(plant);
             const healthInsight = getHealthInsight(plant);
             const adaptive = getAdaptiveWateringInsight(plant);
+            const careProfile = getCareProfileForPlant(plant);
 
             return (
               <Link key={plant.id} href={`/plants/${plant.id}`}>
@@ -119,6 +128,8 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
                   <div className="pill-row mb-4">
                     <span className="pill">{plant.city || "Ville inconnue"}</span>
                     <span className="pill">{plant.exposure || "Non definie"}</span>
+                    {careProfile && <span className="pill">{getDifficultyLabel(careProfile.difficulty)}</span>}
+                    {careProfile && <span className="pill">{getPetSafetyLabel(careProfile.petSafety)}</span>}
                   </div>
 
                   <div className="mb-4 space-y-2">
@@ -163,6 +174,11 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
                         : ""}{" "}
                       jours
                     </p>
+                    {careProfile && (
+                      <p className="mt-3 text-xs font-semibold text-[#516154]">
+                        Profil: {careProfile.headline}
+                      </p>
+                    )}
                   </div>
 
                   <button
@@ -187,6 +203,9 @@ export default function HomePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<HomeMessage | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("urgency");
   const router = useRouter();
 
   const syncNotifications = useCallback(
@@ -505,7 +524,52 @@ export default function HomePage() {
 
   const overdue = plants.filter((plant) => getStatus(plant) === "overdue");
   const today = plants.filter((plant) => getStatus(plant) === "today");
-  const normal = plants.filter((plant) => getStatus(plant) === "ok");
+  const profileCoverage = plants.filter((plant) => getCareProfileForPlant(plant)).length;
+  const heatSensitiveCount = plants.filter(
+    (plant) => getWeatherInsight(plant).tone === "heat"
+  ).length;
+  const searchTerm = searchQuery.trim().toLowerCase();
+
+  const filteredPlants = plants
+    .filter((plant) => {
+      if (!searchTerm) return true;
+
+      return [
+        plant.name,
+        plant.custom_name || "",
+        plant.identified_name || "",
+        plant.scientific_name || "",
+        plant.city || "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(searchTerm);
+    })
+    .filter((plant) => {
+      if (filterMode === "all") return true;
+      if (filterMode === "overdue") return getStatus(plant) === "overdue";
+      if (filterMode === "today") return getStatus(plant) === "today";
+      if (filterMode === "safe") return Boolean(getCareProfileForPlant(plant));
+      return getWeatherInsight(plant).tone === "heat" || getHealthInsight(plant).tone === "danger";
+    })
+    .sort((a, b) => {
+      if (sortMode === "name") {
+        return getPlantDisplayName(a).localeCompare(getPlantDisplayName(b), "fr");
+      }
+
+      if (sortMode === "recent") {
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      }
+
+      const statusWeight = { overdue: 0, today: 1, ok: 2, unknown: 3 };
+      const weightA = statusWeight[getStatus(a)];
+      const weightB = statusWeight[getStatus(b)];
+      return weightA - weightB;
+    });
+
+  const overdueFiltered = filteredPlants.filter((plant) => getStatus(plant) === "overdue");
+  const todayFiltered = filteredPlants.filter((plant) => getStatus(plant) === "today");
+  const normalFiltered = filteredPlants.filter((plant) => getStatus(plant) === "ok");
   const fallbackNotifications = getDashboardNotifications(plants);
   const unreadCount = notifications.filter((notification) => !notification.is_read).length;
   const priorityLabel =
@@ -569,6 +633,55 @@ export default function HomePage() {
             <p className="eyebrow mb-2">Total</p>
             <p className="text-4xl font-black text-[#183624]">{plants.length}</p>
             <p className="subtle-text mt-2 text-sm">Plantes suivies</p>
+          </div>
+        </section>
+
+        <section className="glass-card mb-6 p-6">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="eyebrow mb-2">Pilotage premium</p>
+              <h2 className="section-title !mb-0">Recherche et tri intelligents</h2>
+              <p className="subtle-text mt-2 text-sm">
+                Retrouve plus vite les plantes a risque, les profils enrichis et les urgences.
+              </p>
+            </div>
+
+            <div className="pill-row">
+              <span className="pill">{profileCoverage} profils experts reconnus</span>
+              <span className="pill">{heatSensitiveCount} plantes sensibles a la chaleur</span>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_1fr]">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Rechercher une plante, une ville ou un nom scientifique"
+              className="input-elegant"
+            />
+
+            <select
+              value={filterMode}
+              onChange={(event) => setFilterMode(event.target.value as FilterMode)}
+              className="select-elegant"
+            >
+              <option value="all">Toutes les plantes</option>
+              <option value="overdue">En retard</option>
+              <option value="today">A verifier aujourd&apos;hui</option>
+              <option value="safe">Profils enrichis</option>
+              <option value="watch">A surveiller</option>
+            </select>
+
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as SortMode)}
+              className="select-elegant"
+            >
+              <option value="urgency">Trier par urgence</option>
+              <option value="name">Trier par nom</option>
+              <option value="recent">Trier par ajout recent</option>
+            </select>
           </div>
         </section>
 
@@ -654,21 +767,21 @@ export default function HomePage() {
         <Section
           title="En retard"
           subtitle="Ce sont les plantes les plus urgentes. Un arrosage maintenant reduit le risque d'oubli."
-          plants={overdue}
+          plants={overdueFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}
         />
         <Section
           title="A arroser aujourd'hui"
           subtitle="Ces plantes arrivent a leur tour. Verifie la terre et arrose si besoin."
-          plants={today}
+          plants={todayFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}
         />
         <Section
           title="Tout va bien"
           subtitle="Aucune action immediate. Tu peux simplement garder un oeil sur les conseils meteo."
-          plants={normal}
+          plants={normalFiltered}
           onQuickWater={handleQuickWater}
           getDates={getDates}
         />

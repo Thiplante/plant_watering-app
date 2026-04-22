@@ -8,6 +8,12 @@ import IdentificationOptions from "@/components/plants/IdentificationOptions";
 import { supabase } from "@/lib/supabase";
 import { uploadPlantImage, readFileAsDataUrl } from "@/lib/plants/images";
 import type { PlantIdentificationOption } from "@/lib/plants/identity";
+import {
+  getCareProfileFromIdentification,
+  getDifficultyLabel,
+  getPetSafetyLabel,
+  getRecommendedWateringDays,
+} from "@/lib/plants/profile";
 import { refreshPlantWeather } from "@/lib/weather/actions";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -42,6 +48,7 @@ export default function NewPlantPage() {
   >([]);
   const [selectedIdentification, setSelectedIdentification] =
     useState<PlantIdentificationOption | null>(null);
+  const [showIdentificationOptions, setShowIdentificationOptions] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -115,11 +122,23 @@ export default function NewPlantPage() {
     )} jours, ${trimmedCity}, ${rainMode}.`;
   }, [canBeWateredByRain, city, exposure, frequency, resolvedDisplayName, selectedIdentification]);
 
+  const selectedCareProfile = useMemo(
+    () => getCareProfileFromIdentification(selectedIdentification),
+    [selectedIdentification]
+  );
+
   const handleSelectIdentification = (option: PlantIdentificationOption) => {
     setSelectedIdentification(option);
-    setIdentificationOptions([]);
-    setIdentificationSummary("");
+    setShowIdentificationOptions(false);
     setErrors((current) => ({ ...current, identity: undefined, photo: undefined }));
+  };
+
+  const applySuggestedCare = () => {
+    if (!selectedCareProfile) return;
+
+    setExposure(selectedCareProfile.exposure);
+    setFrequency(getRecommendedWateringDays(selectedCareProfile));
+    setCanBeWateredByRain(selectedCareProfile.exposure === "soleil");
   };
 
   const handleIdentify = async () => {
@@ -157,6 +176,7 @@ export default function NewPlantPage() {
       setIdentificationSummary(data.summary || "");
       setIdentificationOptions(data.suggestions);
       setSelectedIdentification(null);
+      setShowIdentificationOptions(true);
     } catch (error: unknown) {
       setErrors((current) => ({
         ...current,
@@ -262,8 +282,8 @@ export default function NewPlantPage() {
             </h1>
             <p className="subtle-text mt-4 max-w-2xl text-base">
               Une photo peut te proposer plusieurs plantes probables. Une fois la bonne plante
-              choisie, les autres suggestions disparaissent et seule l&apos;identification validee
-              reste visible.
+              choisie, les autres suggestions disparaissent, mais tu peux les rouvrir a tout
+              moment avec un bouton.
             </p>
           </div>
 
@@ -309,7 +329,7 @@ export default function NewPlantPage() {
                   <div className="feedback-banner feedback-error">{errors.photo}</div>
                 )}
 
-                {identificationOptions.length > 0 && (
+                {identificationOptions.length > 0 && showIdentificationOptions && (
                   <IdentificationOptions
                     summary={identificationSummary}
                     options={identificationOptions}
@@ -318,7 +338,7 @@ export default function NewPlantPage() {
                   />
                 )}
 
-                {selectedIdentification && identificationOptions.length === 0 && (
+                {selectedIdentification && !showIdentificationOptions && (
                   <div className="identification-hero">
                     <p className="field-label mb-2">Identification retenue</p>
                     <p className="identification-hero-title">
@@ -335,6 +355,17 @@ export default function NewPlantPage() {
                     <p className="subtle-text mt-2 text-sm">
                       Les autres suggestions ont ete masquees apres ton choix.
                     </p>
+                    {identificationOptions.length > 0 && (
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowIdentificationOptions(true)}
+                          className="btn-secondary"
+                        >
+                          Revoir les suggestions IA
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -372,6 +403,39 @@ export default function NewPlantPage() {
                   </p>
                 </div>
               </div>
+
+              {selectedIdentification && selectedCareProfile && (
+                <div className="care-profile-card mt-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="field-label mb-2">Conseils premium</p>
+                      <p className="text-lg font-black text-[#183624]">
+                        {selectedCareProfile.headline}
+                      </p>
+                      <p className="subtle-text mt-2 text-sm">{selectedCareProfile.notes}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={applySuggestedCare}
+                      className="btn-secondary whitespace-nowrap"
+                    >
+                      Appliquer les reglages conseilles
+                    </button>
+                  </div>
+
+                  <div className="pill-row mt-4">
+                    <span className="pill">
+                      Arrosage {selectedCareProfile.wateringMinDays} a{" "}
+                      {selectedCareProfile.wateringMaxDays} jours
+                    </span>
+                    <span className="pill">{selectedCareProfile.placement}</span>
+                    <span className="pill">{selectedCareProfile.humidity}</span>
+                    <span className="pill">{getPetSafetyLabel(selectedCareProfile.petSafety)}</span>
+                    <span className="pill">{getDifficultyLabel(selectedCareProfile.difficulty)}</span>
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="soft-card p-5 md:p-6">
@@ -455,7 +519,8 @@ export default function NewPlantPage() {
                     Cette plante peut profiter de la pluie
                   </p>
                   <p className="subtle-text text-sm">
-                    Active cette option si la plante est dehors ou peut vraiment etre arrosee par la pluie.
+                    Active cette option si la plante est dehors ou peut vraiment etre arrosee par
+                    la pluie.
                   </p>
                 </div>
               </label>
@@ -465,7 +530,8 @@ export default function NewPlantPage() {
               <p className="eyebrow mb-3">Resume avant creation</p>
               <p className="text-base font-semibold text-[#183624]">{formSummary}</p>
               <p className="subtle-text mt-3 text-sm">
-                La plante sera creee comme arrosee aujourd&apos;hui, puis la meteo sera actualisee automatiquement.
+                La plante sera creee comme arrosee aujourd&apos;hui, puis la meteo sera actualisee
+                automatiquement.
               </p>
             </section>
 
@@ -478,7 +544,8 @@ export default function NewPlantPage() {
                 {saving ? "Enregistrement..." : "Creer la plante"}
               </button>
               <p className="subtle-text text-sm">
-                Tu pourras ensuite changer la photo, le nom personnel et l&apos;identification depuis la fiche plante.
+                Tu pourras ensuite changer la photo, le nom personnel et l&apos;identification
+                depuis la fiche plante.
               </p>
             </div>
           </form>

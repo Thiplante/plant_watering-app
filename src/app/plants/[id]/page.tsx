@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
+import IdentificationOptions from "@/components/plants/IdentificationOptions";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
 import {
   getPlantDisplayName,
@@ -12,7 +13,14 @@ import {
   getConfidenceLabel,
   type PlantIdentificationOption,
 } from "@/lib/plants/identity";
-import { uploadPlantImage } from "@/lib/plants/images";
+import {
+  getCareProfileForPlant,
+  getCareProfileFromIdentification,
+  getDifficultyLabel,
+  getPetSafetyLabel,
+  getRecommendedWateringDays,
+} from "@/lib/plants/profile";
+import { readFileAsDataUrl, uploadPlantImage } from "@/lib/plants/images";
 import {
   getAdaptiveWateringInsight,
   getHealthInsight,
@@ -121,6 +129,7 @@ export default function PlantDetailPage() {
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [updatingImage, setUpdatingImage] = useState(false);
+  const [identifyingImage, setIdentifyingImage] = useState(false);
   const [savingPlant, setSavingPlant] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesAvailable, setNotesAvailable] = useState(true);
@@ -131,6 +140,11 @@ export default function PlantDetailPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [selectedIdentification, setSelectedIdentification] =
     useState<PlantIdentificationOption | null>(null);
+  const [identificationOptions, setIdentificationOptions] = useState<
+    PlantIdentificationOption[]
+  >([]);
+  const [identificationSummary, setIdentificationSummary] = useState("");
+  const [showIdentificationOptions, setShowIdentificationOptions] = useState(false);
 
   const [form, setForm] = useState<PlantForm>({
     customName: "",
@@ -194,6 +208,9 @@ export default function PlantDetailPage() {
       frequency: plantData.watering_frequency_days || 3,
       rain: Boolean(plantData.can_be_watered_by_rain),
     });
+    setIdentificationOptions([]);
+    setIdentificationSummary("");
+    setShowIdentificationOptions(false);
     setSelectedIdentification(
       plantData.identified_name
         ? {
@@ -259,6 +276,71 @@ export default function PlantDetailPage() {
       });
     } finally {
       setSavingNotes(false);
+    }
+  };
+
+  const handleSelectIdentification = (option: PlantIdentificationOption) => {
+    setSelectedIdentification(option);
+    setShowIdentificationOptions(false);
+    setMessage({
+      type: "success",
+      text: "Nouvelle identification choisie. Enregistre les reglages pour la conserver.",
+    });
+  };
+
+  const identifyPlantImage = async () => {
+    if (!plantId) return;
+
+    const imageDataUrl = newImageFile ? await readFileAsDataUrl(newImageFile) : null;
+    const imageUrl = !newImageFile ? plant?.image_url || null : null;
+
+    if (!imageDataUrl && !imageUrl) {
+      setMessage({
+        type: "error",
+        text: "Ajoute ou conserve une photo avant de lancer l'analyse IA.",
+      });
+      return;
+    }
+
+    try {
+      setIdentifyingImage(true);
+      setMessage(null);
+
+      const res = await fetch("/api/plants/identify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...(imageDataUrl ? { imageDataUrl } : {}),
+          ...(imageUrl ? { imageUrl } : {}),
+        }),
+      });
+
+      const data = (await res.json()) as {
+        error?: string;
+        summary?: string;
+        suggestions?: PlantIdentificationOption[];
+      };
+
+      if (!res.ok || !data.suggestions) {
+        throw new Error(data.error || "Impossible d'analyser cette photo");
+      }
+
+      setIdentificationSummary(data.summary || "");
+      setIdentificationOptions(data.suggestions);
+      setShowIdentificationOptions(true);
+      setMessage({
+        type: "success",
+        text: "Analyse terminee. Choisis la bonne plante puis enregistre les reglages.",
+      });
+    } catch (error: unknown) {
+      setMessage({
+        type: "error",
+        text: getErrorMessage(error, "Impossible d'identifier la plante a partir de cette photo"),
+      });
+    } finally {
+      setIdentifyingImage(false);
     }
   };
 
@@ -732,6 +814,23 @@ export default function PlantDetailPage() {
   } jours`;
   const confirmContent = getConfirmContent();
   const identitySubtitle = getPlantIdentitySubtitle(plant);
+  const selectedCareProfile =
+    getCareProfileFromIdentification(selectedIdentification) || getCareProfileForPlant(plant);
+
+  const applySuggestedCare = () => {
+    if (!selectedCareProfile) return;
+
+    setForm((current) => ({
+      ...current,
+      exposure: selectedCareProfile.exposure,
+      frequency: getRecommendedWateringDays(selectedCareProfile),
+      rain: selectedCareProfile.exposure === "soleil",
+    }));
+    setMessage({
+      type: "success",
+      text: "Reglages conseilles appliques. Enregistre la fiche pour les conserver.",
+    });
+  };
 
   return (
     <main className="page-shell">
@@ -804,6 +903,36 @@ export default function PlantDetailPage() {
             </div>
           </div>
 
+          {selectedCareProfile && (
+            <div className="care-profile-card mb-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="eyebrow mb-2">Profil premium</p>
+                  <p className="text-xl font-black text-[#183624]">
+                    {selectedCareProfile.headline}
+                  </p>
+                  <p className="subtle-text mt-2 text-sm">{selectedCareProfile.notes}</p>
+                </div>
+
+                <button onClick={applySuggestedCare} className="btn-secondary">
+                  Appliquer les reglages conseilles
+                </button>
+              </div>
+
+              <div className="pill-row mt-4">
+                <span className="pill">
+                  Arrosage {selectedCareProfile.wateringMinDays} a{" "}
+                  {selectedCareProfile.wateringMaxDays} jours
+                </span>
+                <span className="pill">{selectedCareProfile.placement}</span>
+                <span className="pill">{selectedCareProfile.humidity}</span>
+                <span className="pill">{selectedCareProfile.feeding}</span>
+                <span className="pill">{getPetSafetyLabel(selectedCareProfile.petSafety)}</span>
+                <span className="pill">{getDifficultyLabel(selectedCareProfile.difficulty)}</span>
+              </div>
+            </div>
+          )}
+
           <div className="mb-8">
             {previewUrl ? (
               <Image
@@ -844,6 +973,14 @@ export default function PlantDetailPage() {
                   className="btn-primary"
                 >
                   {updatingImage ? "Upload..." : "Mettre a jour la photo"}
+                </button>
+
+                <button
+                  onClick={identifyPlantImage}
+                  disabled={identifyingImage || (!newImageFile && !plant.image_url)}
+                  className="btn-secondary"
+                >
+                  {identifyingImage ? "Analyse..." : "Relancer l'analyse IA"}
                 </button>
 
                 {plant.image_url && (
@@ -971,7 +1108,7 @@ export default function PlantDetailPage() {
             </div>
           </div>
 
-          {plant.identified_name && (
+          {(selectedIdentification || identificationOptions.length > 0) && (
             <div className="soft-card mb-6 p-5">
               <p className="eyebrow mb-3">Identification</p>
               <div className="space-y-3">
@@ -992,7 +1129,31 @@ export default function PlantDetailPage() {
                     <p className="subtle-text mt-2 text-sm">
                       Cette identification est la seule conservee pour cette plante.
                     </p>
+                    {identificationOptions.length > 0 && !showIdentificationOptions && (
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowIdentificationOptions(true)}
+                          className="btn-secondary"
+                        >
+                          Revoir les suggestions IA
+                        </button>
+                      </div>
+                    )}
                   </div>
+                )}
+
+                {identificationOptions.length > 0 && showIdentificationOptions && (
+                  <IdentificationOptions
+                    title="Suggestions IA"
+                    summary={
+                      identificationSummary ||
+                      "Choisis la proposition qui correspond le mieux a la plante visible sur la photo."
+                    }
+                    options={identificationOptions}
+                    selectedOption={selectedIdentification}
+                    onSelect={handleSelectIdentification}
+                  />
                 )}
               </div>
             </div>

@@ -620,6 +620,16 @@ textarea {
   color: #183624;
 }
 
+.care-profile-card {
+  border-radius: 28px;
+  border: 1px solid rgba(35, 75, 52, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(132, 201, 143, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(241, 247, 241, 0.94) 100%);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
 .grid-elegant {
   display: grid;
   gap: 24px;
