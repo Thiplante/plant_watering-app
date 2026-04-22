@@ -92,21 +92,6 @@ function normalizeFrequency(value: number) {
   return Math.min(30, Math.max(1, Math.round(value)));
 }
 
-function toneClasses(tone: string) {
-  switch (tone) {
-    case "rain":
-    case "good":
-      return "bg-emerald-50 text-emerald-800 border border-emerald-100";
-    case "heat":
-    case "danger":
-      return "bg-rose-50 text-rose-800 border border-rose-100";
-    case "watch":
-      return "bg-amber-50 text-amber-800 border border-amber-100";
-    default:
-      return "bg-slate-50 text-slate-700 border border-slate-100";
-  }
-}
-
 function mapNotes(note: PlantNote | null): PlantNotesForm {
   if (!note) return EMPTY_NOTES;
 
@@ -863,10 +848,9 @@ export default function PlantDetailPage() {
             </p>
           </div>
 
-          <div className="mb-6 rounded-[28px] border border-[rgba(35,75,52,0.08)] bg-[#f7faf7] p-5">
-            <p className="eyebrow mb-2">Action recommandee</p>
+          <div className="mb-6 rounded-[24px] border border-[rgba(35,75,52,0.08)] bg-[#f7faf7] p-5">
             <p className="text-lg font-black text-[#183624]">{weatherInsight.label}</p>
-            <p className="mt-2 text-sm font-semibold text-[#425345]">
+            <p className="mt-2 text-sm text-[#425345]">
               {weatherInsight.detail} Rythme conseille actuellement: {recommendedRange}.
             </p>
           </div>
@@ -884,26 +868,19 @@ export default function PlantDetailPage() {
           )}
 
           <div className="mb-6 grid gap-3 md:grid-cols-3">
-            <div className={`rounded-[28px] px-5 py-5 ${toneClasses(weatherInsight.tone)}`}>
-              <p className="mb-2 text-xs font-black uppercase tracking-[0.22em]">Meteo</p>
-              <p className="text-lg font-black">{weatherInsight.label}</p>
-              <p className="mt-2 text-sm font-semibold">{weatherInsight.detail}</p>
+            <div className="status-card">
+              <span className="status-label">Meteo</span>
+              <span className="status-value">{weatherInsight.label}</span>
             </div>
 
-            <div className={`rounded-[28px] px-5 py-5 ${toneClasses(healthInsight.tone)}`}>
-              <p className="mb-2 text-xs font-black uppercase tracking-[0.22em]">Sante</p>
-              <p className="text-lg font-black">{healthInsight.label}</p>
-              <p className="mt-2 text-sm font-semibold">{healthInsight.detail}</p>
+            <div className="status-card">
+              <span className="status-label">Sante</span>
+              <span className="status-value">{healthInsight.label}</span>
             </div>
 
-            <div className="rounded-[28px] border border-[rgba(35,75,52,0.08)] bg-white/85 px-5 py-5">
-              <p className="mb-2 text-xs font-black uppercase tracking-[0.22em] text-[#6c7d70]">
-                Arrosage adaptatif
-              </p>
-              <p className="text-lg font-black text-[#183624]">{adaptiveInsight.label}</p>
-              <p className="mt-2 text-sm font-semibold text-[#425345]">
-                Intervalle recommande : {recommendedRange}
-              </p>
+            <div className="status-card">
+              <span className="status-label">Rythme</span>
+              <span className="status-value">{recommendedRange}</span>
             </div>
           </div>
 

@@ -84,7 +84,6 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
           {plants.map((plant) => {
             const dates = getDates(plant);
             const weatherInsight = getWeatherInsight(plant);
-            const healthInsight = getHealthInsight(plant);
             const adaptive = getAdaptiveWateringInsight(plant);
             const careProfile = getCareProfileForPlant(plant);
 
@@ -105,19 +104,6 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
                     </div>
                   )}
 
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-extrabold ${toneClasses(weatherInsight.tone)}`}
-                    >
-                      {weatherInsight.label}
-                    </span>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-extrabold ${toneClasses(healthInsight.tone)}`}
-                    >
-                      {healthInsight.label}
-                    </span>
-                  </div>
-
                   <h3 className="plant-title">{getPlantDisplayName(plant)}</h3>
                   {getPlantIdentitySubtitle(plant) && (
                     <p className="mb-3 text-sm font-semibold text-[#5b6b5e]">
@@ -127,9 +113,7 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
 
                   <div className="pill-row mb-4">
                     <span className="pill">{plant.city || "Ville inconnue"}</span>
-                    <span className="pill">{plant.exposure || "Non definie"}</span>
                     {careProfile && <span className="pill">{getDifficultyLabel(careProfile.difficulty)}</span>}
-                    {careProfile && <span className="pill">{getPetSafetyLabel(careProfile.petSafety)}</span>}
                   </div>
 
                   <div className="mb-4 space-y-2">
@@ -160,13 +144,9 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
                     </div>
                   </div>
 
-                  <div className="mb-4 rounded-[24px] bg-[#f7faf7] px-4 py-4">
-                    <p className="mb-1 text-xs font-black uppercase tracking-[0.22em] text-[#6f7f73]">
-                      Conseil du moment
-                    </p>
-                    <p className="text-sm font-semibold text-[#193425]">
-                      {weatherInsight.detail}
-                    </p>
+                  <div className="mb-4 rounded-[20px] bg-[#f7faf7] px-4 py-4">
+                    <p className="text-sm font-semibold text-[#193425]">{weatherInsight.label}</p>
+                    <p className="mt-2 text-sm text-[#516154]">{weatherInsight.detail}</p>
                     <p className="mt-3 text-xs font-semibold text-[#516154]">
                       {adaptive.label}: {adaptive.minDays}
                       {adaptive.maxDays !== adaptive.minDays
@@ -175,8 +155,8 @@ function Section({ title, subtitle, plants, onQuickWater, getDates }: SectionPro
                       jours
                     </p>
                     {careProfile && (
-                      <p className="mt-3 text-xs font-semibold text-[#516154]">
-                        Profil: {careProfile.headline}
+                      <p className="mt-3 text-xs text-[#516154]">
+                        {getPetSafetyLabel(careProfile.petSafety)}
                       </p>
                     )}
                   </div>

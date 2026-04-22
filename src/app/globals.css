@@ -19,9 +19,9 @@
   --danger: #b84f4f;
   --danger-soft: #f8e7e7;
 
-  --shadow-sm: 0 8px 24px rgba(20, 32, 24, 0.06);
-  --shadow-md: 0 18px 50px rgba(20, 32, 24, 0.1);
-  --shadow-lg: 0 28px 80px rgba(20, 32, 24, 0.14);
+  --shadow-sm: 0 4px 16px rgba(20, 32, 24, 0.04);
+  --shadow-md: 0 10px 30px rgba(20, 32, 24, 0.07);
+  --shadow-lg: 0 18px 44px rgba(20, 32, 24, 0.1);
 
   --radius-sm: 16px;
   --radius-md: 24px;
@@ -45,10 +45,7 @@ body {
 body {
   margin: 0;
   color: var(--foreground);
-  background:
-    radial-gradient(circle at top left, rgba(111, 168, 124, 0.12), transparent 28%),
-    radial-gradient(circle at top right, rgba(178, 216, 183, 0.14), transparent 22%),
-    linear-gradient(180deg, #f8fbf7 0%, #eef5ee 100%);
+  background: linear-gradient(180deg, #f7faf6 0%, #eef4ee 100%);
   font-family:
     Inter,
     ui-sans-serif,
@@ -127,8 +124,8 @@ textarea {
   background: var(--card);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-md);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: var(--radius-xl);
 }
 
@@ -172,12 +169,12 @@ textarea {
   gap: 10px;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--primary) 0%, #2f6646 100%);
+  background: var(--primary);
   color: white;
   padding: 14px 22px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  box-shadow: 0 14px 30px rgba(35, 75, 52, 0.22);
+  box-shadow: 0 8px 20px rgba(35, 75, 52, 0.16);
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease,
@@ -188,8 +185,8 @@ textarea {
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 18px 34px rgba(35, 75, 52, 0.28);
-  background: linear-gradient(135deg, var(--primary-hover) 0%, #28563c 100%);
+  box-shadow: 0 10px 22px rgba(35, 75, 52, 0.18);
+  background: var(--primary-hover);
 }
 
 .btn-primary:active {
@@ -327,7 +324,7 @@ textarea {
 .plant-card {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(250,252,249,0.96) 100%);
+  background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(35, 75, 52, 0.08);
   border-radius: 34px;
   padding: 28px;
@@ -338,20 +335,10 @@ textarea {
     border-color 0.22s ease;
 }
 
-.plant-card::before {
-  content: "";
-  position: absolute;
-  inset: auto -40px -40px auto;
-  width: 140px;
-  height: 140px;
-  background: radial-gradient(circle, rgba(143, 191, 151, 0.18), transparent 68%);
-  pointer-events: none;
-}
-
 .plant-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
-  border-color: rgba(35, 75, 52, 0.16);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(35, 75, 52, 0.12);
 }
 
 .plant-title {
@@ -454,11 +441,11 @@ textarea {
 
 /* Top bar */
 .topbar-blur {
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.84);
   border: 1px solid rgba(35, 75, 52, 0.06);
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: 28px;
 }
 
@@ -501,8 +488,7 @@ textarea {
 .identification-panel {
   border-radius: 28px;
   border: 1px solid rgba(35, 75, 52, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 248, 244, 0.9) 100%);
+  background: rgba(255, 255, 255, 0.96);
   padding: 20px;
   box-shadow: var(--shadow-sm);
 }
@@ -529,8 +515,8 @@ textarea {
 
 .identification-option.is-selected {
   border-color: rgba(35, 75, 52, 0.26);
-  background: linear-gradient(180deg, #f4faf4 0%, #eaf4ec 100%);
-  box-shadow: 0 18px 36px rgba(35, 75, 52, 0.12);
+  background: #f4faf4;
+  box-shadow: 0 10px 24px rgba(35, 75, 52, 0.08);
 }
 
 .selection-chip,
@@ -609,7 +595,7 @@ textarea {
 .identification-hero {
   border-radius: 28px;
   border: 1px solid rgba(35, 75, 52, 0.08);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(236, 244, 238, 0.94) 100%);
+  background: rgba(255, 255, 255, 0.95);
   padding: 18px 20px;
 }
 
@@ -623,9 +609,7 @@ textarea {
 .care-profile-card {
   border-radius: 28px;
   border: 1px solid rgba(35, 75, 52, 0.08);
-  background:
-    radial-gradient(circle at top right, rgba(132, 201, 143, 0.12), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(241, 247, 241, 0.94) 100%);
+  background: rgba(255, 255, 255, 0.96);
   padding: 20px;
   box-shadow: var(--shadow-sm);
 }
