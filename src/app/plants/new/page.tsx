@@ -115,6 +115,13 @@ export default function NewPlantPage() {
     )} jours, ${trimmedCity}, ${rainMode}.`;
   }, [canBeWateredByRain, city, exposure, frequency, resolvedDisplayName, selectedIdentification]);
 
+  const handleSelectIdentification = (option: PlantIdentificationOption) => {
+    setSelectedIdentification(option);
+    setIdentificationOptions([]);
+    setIdentificationSummary("");
+    setErrors((current) => ({ ...current, identity: undefined, photo: undefined }));
+  };
+
   const handleIdentify = async () => {
     if (!imageFile) {
       setErrors((current) => ({
@@ -149,7 +156,7 @@ export default function NewPlantPage() {
 
       setIdentificationSummary(data.summary || "");
       setIdentificationOptions(data.suggestions);
-      setSelectedIdentification(data.suggestions[0] || null);
+      setSelectedIdentification(null);
     } catch (error: unknown) {
       setErrors((current) => ({
         ...current,
@@ -196,7 +203,7 @@ export default function NewPlantPage() {
           identified_name: chosenIdentification?.common_name || null,
           scientific_name: chosenIdentification?.scientific_name || null,
           identification_confidence: chosenIdentification?.confidence ?? null,
-          identification_options: identificationOptions,
+          identification_options: [],
           watering_frequency_days: safeFrequency,
           city: city.trim(),
           exposure,
@@ -254,8 +261,9 @@ export default function NewPlantPage() {
               Identifie la plante, puis personalise-la
             </h1>
             <p className="subtle-text mt-4 max-w-2xl text-base">
-              Une photo peut te proposer plusieurs plantes probables. Tu peux ensuite garder ce
-              nom, ou ajouter ton propre nom personnel.
+              Une photo peut te proposer plusieurs plantes probables. Une fois la bonne plante
+              choisie, les autres suggestions disparaissent et seule l&apos;identification validee
+              reste visible.
             </p>
           </div>
 
@@ -306,8 +314,28 @@ export default function NewPlantPage() {
                     summary={identificationSummary}
                     options={identificationOptions}
                     selectedOption={selectedIdentification}
-                    onSelect={setSelectedIdentification}
+                    onSelect={handleSelectIdentification}
                   />
+                )}
+
+                {selectedIdentification && identificationOptions.length === 0 && (
+                  <div className="identification-hero">
+                    <p className="field-label mb-2">Identification retenue</p>
+                    <p className="identification-hero-title">
+                      {selectedIdentification.common_name}
+                    </p>
+                    <p className="subtle-text text-sm italic">
+                      {selectedIdentification.scientific_name || "Nom scientifique non renseigne"}
+                    </p>
+                    {selectedIdentification.confidence > 0 && (
+                      <p className="mt-3 text-sm font-semibold text-[#425345]">
+                        Confiance retenue: {selectedIdentification.confidence}%
+                      </p>
+                    )}
+                    <p className="subtle-text mt-2 text-sm">
+                      Les autres suggestions ont ete masquees apres ton choix.
+                    </p>
+                  </div>
                 )}
               </div>
             </section>

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
-import IdentificationOptions from "@/components/plants/IdentificationOptions";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
 import {
   getPlantDisplayName,
@@ -13,7 +12,7 @@ import {
   getConfidenceLabel,
   type PlantIdentificationOption,
 } from "@/lib/plants/identity";
-import { readFileAsDataUrl, uploadPlantImage } from "@/lib/plants/images";
+import { uploadPlantImage } from "@/lib/plants/images";
 import {
   getAdaptiveWateringInsight,
   getHealthInsight,
@@ -122,7 +121,6 @@ export default function PlantDetailPage() {
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [updatingImage, setUpdatingImage] = useState(false);
-  const [identifyingImage, setIdentifyingImage] = useState(false);
   const [savingPlant, setSavingPlant] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesAvailable, setNotesAvailable] = useState(true);
@@ -133,10 +131,6 @@ export default function PlantDetailPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [selectedIdentification, setSelectedIdentification] =
     useState<PlantIdentificationOption | null>(null);
-  const [identificationOptions, setIdentificationOptions] = useState<
-    PlantIdentificationOption[]
-  >([]);
-  const [identificationSummary, setIdentificationSummary] = useState("");
 
   const [form, setForm] = useState<PlantForm>({
     customName: "",
@@ -200,8 +194,6 @@ export default function PlantDetailPage() {
       frequency: plantData.watering_frequency_days || 3,
       rain: Boolean(plantData.can_be_watered_by_rain),
     });
-    setIdentificationOptions(plantData.identification_options || []);
-    setIdentificationSummary("");
     setSelectedIdentification(
       plantData.identified_name
         ? {
@@ -267,62 +259,6 @@ export default function PlantDetailPage() {
       });
     } finally {
       setSavingNotes(false);
-    }
-  };
-
-  const identifyPlantImage = async () => {
-    if (!plantId) return;
-
-    const imageDataUrl = newImageFile ? await readFileAsDataUrl(newImageFile) : null;
-    const imageUrl = !newImageFile ? plant?.image_url || null : null;
-
-    if (!imageDataUrl && !imageUrl) {
-      setMessage({
-        type: "error",
-        text: "Ajoute ou conserve une photo avant de lancer l'analyse IA.",
-      });
-      return;
-    }
-
-    try {
-      setIdentifyingImage(true);
-      setMessage(null);
-
-      const res = await fetch("/api/plants/identify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...(imageDataUrl ? { imageDataUrl } : {}),
-          ...(imageUrl ? { imageUrl } : {}),
-        }),
-      });
-
-      const data = (await res.json()) as {
-        error?: string;
-        summary?: string;
-        suggestions?: PlantIdentificationOption[];
-      };
-
-      if (!res.ok || !data.suggestions) {
-        throw new Error(data.error || "Impossible d'analyser cette photo");
-      }
-
-      setIdentificationSummary(data.summary || "");
-      setIdentificationOptions(data.suggestions);
-      setSelectedIdentification(data.suggestions[0] || null);
-      setMessage({
-        type: "success",
-        text: "Analyse terminee. Pense a enregistrer les reglages si cette identification te convient.",
-      });
-    } catch (error: unknown) {
-      setMessage({
-        type: "error",
-        text: getErrorMessage(error, "Impossible d'identifier la plante a partir de cette photo"),
-      });
-    } finally {
-      setIdentifyingImage(false);
     }
   };
 
@@ -451,7 +387,7 @@ export default function PlantDetailPage() {
           selectedIdentification?.scientific_name || plant?.scientific_name || null,
         identification_confidence:
           selectedIdentification?.confidence ?? plant?.identification_confidence ?? null,
-        identification_options: identificationOptions,
+        identification_options: [],
         city: trimmedCity,
         exposure: form.exposure,
         watering_frequency_days: safeFrequency,
@@ -910,14 +846,6 @@ export default function PlantDetailPage() {
                   {updatingImage ? "Upload..." : "Mettre a jour la photo"}
                 </button>
 
-                <button
-                  onClick={identifyPlantImage}
-                  disabled={identifyingImage || (!newImageFile && !plant.image_url)}
-                  className="btn-secondary"
-                >
-                  {identifyingImage ? "Analyse..." : "Relancer l'analyse IA"}
-                </button>
-
                 {plant.image_url && (
                   <button
                     onClick={() => setConfirmState({ kind: "remove-image" })}
@@ -1043,7 +971,7 @@ export default function PlantDetailPage() {
             </div>
           </div>
 
-          {(plant.identified_name || identificationOptions.length > 0 || plant.image_url || newImageFile) && (
+          {plant.identified_name && (
             <div className="soft-card mb-6 p-5">
               <p className="eyebrow mb-3">Identification</p>
               <div className="space-y-3">
@@ -1062,22 +990,10 @@ export default function PlantDetailPage() {
                       </p>
                     )}
                     <p className="subtle-text mt-2 text-sm">
-                      Cette identification sera enregistree comme reference principale pour cette
-                      plante.
+                      Cette identification est la seule conservee pour cette plante.
                     </p>
                   </div>
                 )}
-
-                <IdentificationOptions
-                  title="Choix disponibles"
-                  summary={
-                    identificationSummary ||
-                    "Tu peux conserver l'identification actuelle ou choisir une autre proposition si elle correspond mieux a la plante."
-                  }
-                  options={identificationOptions}
-                  selectedOption={selectedIdentification}
-                  onSelect={setSelectedIdentification}
-                />
               </div>
             </div>
           )}
