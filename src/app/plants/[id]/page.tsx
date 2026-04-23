@@ -30,6 +30,7 @@ import {
 } from "@/lib/plants/insights";
 import { getUserLocations } from "@/lib/locations";
 import { supabase } from "@/lib/supabase";
+import { refreshPlantWeather } from "@/lib/weather/actions";
 import type {
   Plant,
   PlantHealthCheck,
