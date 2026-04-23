@@ -1,32 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { geocodeCity } from "@/lib/weather/geocode";
 import { getPlantWeatherForecast } from "@/lib/weather/forecast";
 import { buildWeatherAdvice } from "@/lib/weather/advice";
+import {
+  createAdminClient,
+  getPlantForUser,
+  requireRouteUser,
+} from "@/lib/server/plant-access";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl) {
-      return NextResponse.json(
-        { error: "Variable NEXT_PUBLIC_SUPABASE_URL manquante" },
-        { status: 500 }
-      );
-    }
-
-    if (!supabaseServiceRoleKey) {
-      return NextResponse.json(
-        { error: "Variable SUPABASE_SERVICE_ROLE_KEY manquante" },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-
     const body = await req.json();
     const plantId = body?.plantId as string | undefined;
 
@@ -34,15 +19,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "plantId manquant" }, { status: 400 });
     }
 
-    const { data: plant, error: plantError } = await supabase
-      .from("plants")
-      .select("id, city, latitude, longitude")
-      .eq("id", plantId)
-      .single();
+    const auth = await requireRouteUser(req);
 
-    if (plantError || !plant) {
-      return NextResponse.json({ error: "Plante introuvable" }, { status: 404 });
+    if (!auth.user) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+
+    const access = await getPlantForUser(plantId, auth.user);
+
+    if (!access.plant) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const supabase = createAdminClient();
+    const plant = access.plant;
 
     let latitude: number | null = plant.latitude;
     let longitude: number | null = plant.longitude;
@@ -114,6 +104,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("POST /api/weather/refresh error:", error);
 
-    return NextResponse.json({ error: "Erreur serveur meteo" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Erreur serveur meteo";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -48,9 +48,16 @@ type SectionProps = {
   subtitle: string;
   plants: Plant[];
   onQuickWater: (event: React.MouseEvent<HTMLButtonElement>, plant: Plant) => void;
+  canQuickWater: (plant: Plant) => boolean;
   getDates: (plant: Plant) => PlantDateInfo;
   getLocationName: (plant: Plant) => string | null;
 };
+
+function throwIfError(error: { message: string } | null) {
+  if (error) {
+    throw new Error(error.message);
+  }
+}
 
 function toneClasses(tone: string) {
   switch (tone) {
@@ -69,7 +76,15 @@ function toneClasses(tone: string) {
   }
 }
 
-function Section({ title, subtitle, plants, onQuickWater, getDates, getLocationName }: SectionProps) {
+function Section({
+  title,
+  subtitle,
+  plants,
+  onQuickWater,
+  canQuickWater,
+  getDates,
+  getLocationName,
+}: SectionProps) {
   return (
     <section className="mb-10">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -166,12 +181,18 @@ function Section({ title, subtitle, plants, onQuickWater, getDates, getLocationN
                     )}
                   </div>
 
-                  <button
-                    onClick={(event) => onQuickWater(event, plant)}
-                    className="btn-primary w-full"
-                  >
-                    Marquer comme arrosee
-                  </button>
+                  {canQuickWater(plant) ? (
+                    <button
+                      onClick={(event) => onQuickWater(event, plant)}
+                      className="btn-primary w-full"
+                    >
+                      Marquer comme arrosee
+                    </button>
+                  ) : (
+                    <div className="soft-card rounded-[20px] px-4 py-3 text-sm font-semibold text-[#516154]">
+                      Acces partage en lecture seule.
+                    </div>
+                  )}
                 </div>
               </Link>
             );
@@ -210,14 +231,17 @@ export default function HomePage() {
 
         const { data: existingData } = await supabase
           .from("notifications")
-          .select("id, notification_key")
+          .select("id, notification_key, is_read")
           .eq("user_id", currentUserId)
           .in("type", generatedTypes);
 
         const existing = (existingData || []) as Pick<
           AppNotification,
-          "id" | "notification_key"
+          "id" | "notification_key" | "is_read"
         >[];
+        const existingByKey = new Map(
+          existing.map((notification) => [notification.notification_key, notification])
+        );
         const currentKeys = new Set(drafts.map((draft) => draft.notification_key));
         const staleIds = existing
           .filter((notification) => !currentKeys.has(notification.notification_key))
@@ -228,16 +252,18 @@ export default function HomePage() {
         }
 
         if (drafts.length > 0) {
-          await supabase.from("notifications").upsert(
+          const { error: upsertError } = await supabase.from("notifications").upsert(
             drafts.map((draft) => ({
               user_id: currentUserId,
-              is_read: false,
+              is_read: existingByKey.get(draft.notification_key)?.is_read ?? false,
               ...draft,
             })),
             {
               onConflict: "user_id,notification_key",
             }
           );
+
+          throwIfError(upsertError);
         }
 
         const { data: notificationsData } = await supabase
@@ -306,7 +332,7 @@ export default function HomePage() {
 
     const mergedPlants = Array.from(uniquePlantsMap.values());
     setPlants(mergedPlants);
-    await syncNotifications(user.id, mergedPlants);
+    await syncNotifications(user.id, myPlants);
     setLoading(false);
   }, [router, syncNotifications]);
 
@@ -330,12 +356,18 @@ export default function HomePage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      await supabase.from("plants").update({ last_watered_at: now }).eq("id", plant.id);
-      await supabase.from("watering_logs").insert({
+      const { error: plantError } = await supabase
+        .from("plants")
+        .update({ last_watered_at: now })
+        .eq("id", plant.id);
+      throwIfError(plantError);
+
+      const { error: logError } = await supabase.from("watering_logs").insert({
         plant_id: plant.id,
         watered_at: now,
         user_id: user?.id,
       });
+      throwIfError(logError);
 
       await fetchPlants();
       setMessage({
@@ -364,6 +396,11 @@ export default function HomePage() {
       notification.type === "watering_overdue" ||
       notification.type === "watering_soon"
     ) {
+      if (relatedPlant.owner_id !== userId) {
+        router.push(`/plants/${relatedPlant.id}`);
+        return;
+      }
+
       setLoading(true);
       setMessage(null);
 
@@ -373,12 +410,18 @@ export default function HomePage() {
           data: { user },
         } = await supabase.auth.getUser();
 
-        await supabase.from("plants").update({ last_watered_at: now }).eq("id", relatedPlant.id);
-        await supabase.from("watering_logs").insert({
+        const { error: plantError } = await supabase
+          .from("plants")
+          .update({ last_watered_at: now })
+          .eq("id", relatedPlant.id);
+        throwIfError(plantError);
+
+        const { error: logError } = await supabase.from("watering_logs").insert({
           plant_id: relatedPlant.id,
           watered_at: now,
           user_id: user?.id,
         });
+        throwIfError(logError);
         await markNotificationRead(notification.id);
         await fetchPlants();
         setMessage({
@@ -793,6 +836,7 @@ export default function HomePage() {
           subtitle="A traiter en premier."
           plants={overdueFiltered}
           onQuickWater={handleQuickWater}
+          canQuickWater={(plant) => plant.owner_id === userId}
           getDates={getDates}
           getLocationName={(plant) =>
             plant.location_id ? locationMap.get(plant.location_id) || null : null
@@ -803,6 +847,7 @@ export default function HomePage() {
           subtitle="A verifier aujourd&apos;hui."
           plants={todayFiltered}
           onQuickWater={handleQuickWater}
+          canQuickWater={(plant) => plant.owner_id === userId}
           getDates={getDates}
           getLocationName={(plant) =>
             plant.location_id ? locationMap.get(plant.location_id) || null : null
@@ -813,6 +858,7 @@ export default function HomePage() {
           subtitle="Aucune action immediate."
           plants={normalFiltered}
           onQuickWater={handleQuickWater}
+          canQuickWater={(plant) => plant.owner_id === userId}
           getDates={getDates}
           getLocationName={(plant) =>
             plant.location_id ? locationMap.get(plant.location_id) || null : null

@@ -1,9 +1,11 @@
+import { getAuthenticatedHeaders } from "@/lib/api";
+
 export async function refreshPlantWeather(plantId: string) {
   const res = await fetch("/api/weather/refresh", {
     method: "POST",
-    headers: {
+    headers: await getAuthenticatedHeaders({
       "Content-Type": "application/json",
-    },
+    }),
     body: JSON.stringify({ plantId }),
   });
 

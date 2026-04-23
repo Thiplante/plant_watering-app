@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { getAuthenticatedHeaders } from "@/lib/api";
 
 type WeatherTimelinePoint = {
   date: string;
@@ -70,7 +71,9 @@ export default function WeatherTimelinePanel({
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`/api/weather/timeline?plantId=${plantId}`);
+        const res = await fetch(`/api/weather/timeline?plantId=${plantId}`, {
+          headers: await getAuthenticatedHeaders(),
+        });
         const data = (await res.json()) as WeatherTimelineResponse;
 
         if (!res.ok) {
@@ -135,7 +138,7 @@ export default function WeatherTimelinePanel({
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(35,75,52,0.12)" />
               <XAxis dataKey="label" stroke="#607264" />
-              <YAxis unit="°C" stroke="#607264" />
+              <YAxis unit="deg C" stroke="#607264" />
               <Tooltip />
               <Legend />
               <Line

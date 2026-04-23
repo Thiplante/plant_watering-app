@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import IdentificationOptions from "@/components/plants/IdentificationOptions";
+import { getAuthenticatedHeaders } from "@/lib/api";
 import { getUserLocations } from "@/lib/locations";
 import { supabase } from "@/lib/supabase";
 import { uploadPlantImage, readFileAsDataUrl } from "@/lib/plants/images";
@@ -162,9 +163,9 @@ export default function NewPlantPage() {
       const imageDataUrl = await readFileAsDataUrl(imageFile);
       const response = await fetch("/api/plants/identify", {
         method: "POST",
-        headers: {
+        headers: await getAuthenticatedHeaders({
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({ imageDataUrl }),
       });
 

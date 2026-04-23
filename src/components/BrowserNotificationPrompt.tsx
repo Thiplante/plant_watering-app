@@ -61,8 +61,8 @@ export default function BrowserNotificationPrompt() {
       <p className="eyebrow mb-2">Notifications</p>
       <h2 className="section-title !mb-0">Recevoir les rappels ici</h2>
       <p className="subtle-text mt-2 text-sm">
-        Active les notifications navigateur pour voir les rappels d&apos;arrosage sans ouvrir
-        l&apos;application.
+        Active les notifications navigateur pour preparer les rappels web. L&apos;application
+        enregistre ici ton accord et affiche une notification de test immediatement.
       </p>
       <div className="mt-4">
         <button onClick={enableNotifications} disabled={saving} className="btn-secondary">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPlantForUser, requireRouteUser } from "@/lib/server/plant-access";
 
 export const dynamic = "force-dynamic";
 
@@ -49,11 +50,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "OPENAI_API_KEY manquante" }, { status: 503 });
     }
 
-    const body = (await req.json()) as { imageDataUrl?: string; imageUrl?: string };
+    const body = (await req.json()) as {
+      imageDataUrl?: string;
+      imageUrl?: string;
+      plantId?: string;
+    };
     const imageSource = body.imageDataUrl || body.imageUrl;
 
     if (!imageSource) {
       return NextResponse.json({ error: "Image manquante" }, { status: 400 });
+    }
+
+    const auth = await requireRouteUser(req);
+
+    if (!auth.user) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    if (!body.plantId) {
+      return NextResponse.json({ error: "plantId manquant" }, { status: 400 });
+    }
+
+    const access = await getPlantForUser(body.plantId, auth.user);
+
+    if (!access.plant) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
     const response = await fetch("https://api.openai.com/v1/responses", {

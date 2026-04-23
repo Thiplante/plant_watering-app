@@ -1,39 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { geocodeCity } from "@/lib/weather/geocode";
 import { getWeatherTimeline } from "@/lib/weather/timeline";
+import {
+  createAdminClient,
+  getPlantForUser,
+  requireRouteUser,
+} from "@/lib/server/plant-access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      return NextResponse.json(
-        { error: "Variables Supabase manquantes" },
-        { status: 500 }
-      );
-    }
-
     const plantId = req.nextUrl.searchParams.get("plantId");
 
     if (!plantId) {
       return NextResponse.json({ error: "plantId manquant" }, { status: 400 });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+    const auth = await requireRouteUser(req);
 
-    const { data: plant, error: plantError } = await supabase
-      .from("plants")
-      .select("id, city, latitude, longitude")
-      .eq("id", plantId)
-      .single();
-
-    if (plantError || !plant) {
-      return NextResponse.json({ error: "Plante introuvable" }, { status: 404 });
+    if (!auth.user) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+
+    const access = await getPlantForUser(plantId, auth.user);
+
+    if (!access.plant) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const supabase = createAdminClient();
+    const plant = access.plant;
 
     let latitude: number | null = plant.latitude;
     let longitude: number | null = plant.longitude;
@@ -75,6 +72,8 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("GET /api/weather/timeline error:", error);
 
-    return NextResponse.json({ error: "Erreur serveur meteo detaillee" }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Erreur serveur meteo detaillee";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

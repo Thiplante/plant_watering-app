@@ -8,6 +8,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import IdentificationOptions from "@/components/plants/IdentificationOptions";
 import RefreshWeatherButton from "@/components/plants/RefreshWeatherButton";
 import WeatherTimelinePanel from "@/components/plants/WeatherTimelinePanel";
+import { getAuthenticatedHeaders } from "@/lib/api";
 import {
   getPlantDisplayName,
   getPlantIdentitySubtitle,
@@ -122,6 +123,12 @@ function normalizeFrequency(value: number) {
   return Math.min(30, Math.max(1, Math.round(value)));
 }
 
+function throwIfError(error: { message: string } | null) {
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 function mapNotes(note: PlantNote | null): PlantNotesForm {
   if (!note) return EMPTY_NOTES;
 
@@ -147,6 +154,7 @@ export default function PlantDetailPage() {
   const [history, setHistory] = useState<WateringLog[]>([]);
   const [sharedWith, setSharedWith] = useState<PlantShare[]>([]);
   const [locations, setLocations] = useState<PlantLocation[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [shareEmail, setShareEmail] = useState("");
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -187,6 +195,7 @@ export default function PlantDetailPage() {
     frequency: 3,
     rain: false,
   });
+  const canManage = Boolean(plant && currentUserId === plant.owner_id);
 
   useEffect(() => {
     if (!newImageFile) {
@@ -206,6 +215,17 @@ export default function PlantDetailPage() {
     if (!plantId) return;
 
     setLoading(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+
+    setCurrentUserId(user.id);
 
     const [
       { data: plantDataRaw },
@@ -292,6 +312,13 @@ export default function PlantDetailPage() {
 
   const saveNotes = async () => {
     if (!plantId || !notesAvailable) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Cette plante est partagee en lecture seule.",
+      });
+      return;
+    }
 
     try {
       setSavingNotes(true);
@@ -366,10 +393,11 @@ export default function PlantDetailPage() {
 
       const res = await fetch("/api/plants/identify", {
         method: "POST",
-        headers: {
+        headers: await getAuthenticatedHeaders({
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({
+          plantId,
           ...(imageDataUrl ? { imageDataUrl } : {}),
           ...(imageUrl ? { imageUrl } : {}),
         }),
@@ -404,6 +432,13 @@ export default function PlantDetailPage() {
 
   const runHealthCheck = async () => {
     if (!plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut enregistrer un diagnostic.",
+      });
+      return;
+    }
 
     const imageDataUrl = newImageFile ? await readFileAsDataUrl(newImageFile) : null;
     const imageUrl = !newImageFile ? plant?.image_url || null : null;
@@ -422,8 +457,11 @@ export default function PlantDetailPage() {
 
       const res = await fetch("/api/plants/health-check", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await getAuthenticatedHeaders({
+          "Content-Type": "application/json",
+        }),
         body: JSON.stringify({
+          plantId,
           ...(imageDataUrl ? { imageDataUrl } : {}),
           ...(imageUrl ? { imageUrl } : {}),
         }),
@@ -445,7 +483,7 @@ export default function PlantDetailPage() {
         imageUrl ||
         (newImageFile && user ? await uploadPlantImage(newImageFile, user.id) : null);
 
-      await supabase.from("plant_health_checks").insert({
+      const { error: healthCheckError } = await supabase.from("plant_health_checks").insert({
         plant_id: plantId,
         created_by: user?.id ?? null,
         image_url: persistedImageUrl,
@@ -454,6 +492,7 @@ export default function PlantDetailPage() {
         likely_cause: data.likely_cause,
         recommendations: data.recommendations,
       });
+      throwIfError(healthCheckError);
 
       await loadData();
       setMessage({
@@ -472,6 +511,13 @@ export default function PlantDetailPage() {
 
   const saveJournalEntry = async () => {
     if (!plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut ajouter des entrees au journal.",
+      });
+      return;
+    }
 
     if (!journalTitle.trim() && !journalNote.trim() && !newImageFile) {
       setMessage({
@@ -491,7 +537,7 @@ export default function PlantDetailPage() {
 
       const imageUrl = newImageFile && user ? await uploadPlantImage(newImageFile, user.id) : null;
 
-      await supabase.from("plant_journal_entries").insert({
+      const { error } = await supabase.from("plant_journal_entries").insert({
         plant_id: plantId,
         author_id: user?.id ?? null,
         entry_type: imageUrl ? "photo" : "note",
@@ -499,6 +545,7 @@ export default function PlantDetailPage() {
         note: journalNote.trim() || null,
         image_url: imageUrl,
       });
+      throwIfError(error);
 
       setJournalTitle("");
       setJournalNote("");
@@ -520,24 +567,19 @@ export default function PlantDetailPage() {
 
   const refreshWeather = async () => {
     if (!plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut actualiser la meteo.",
+      });
+      return;
+    }
 
     try {
       setWeatherRefreshing(true);
       setMessage(null);
 
-      const res = await fetch("/api/weather/refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ plantId }),
-      });
-
-      const data = (await res.json()) as { error?: string };
-
-      if (!res.ok) {
-        throw new Error(data.error || "Impossible de rafraichir la meteo");
-      }
+      await refreshPlantWeather(plantId);
 
       await loadData();
       router.refresh();
@@ -557,6 +599,13 @@ export default function PlantDetailPage() {
 
   const uploadNewImage = async () => {
     if (!newImageFile || !plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut modifier la photo.",
+      });
+      return;
+    }
 
     setUpdatingImage(true);
     setMessage(null);
@@ -573,10 +622,11 @@ export default function PlantDetailPage() {
 
       const imageUrl = await uploadPlantImage(newImageFile, user.id);
 
-      await supabase
+      const { error } = await supabase
         .from("plants")
         .update({ image_url: imageUrl })
         .eq("id", plantId);
+      throwIfError(error);
 
       setNewImageFile(null);
       await loadData();
@@ -596,10 +646,21 @@ export default function PlantDetailPage() {
 
   const removeImage = async () => {
     if (!plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut retirer la photo.",
+      });
+      return;
+    }
 
     setMessage(null);
     try {
-      await supabase.from("plants").update({ image_url: null }).eq("id", plantId);
+      const { error } = await supabase
+        .from("plants")
+        .update({ image_url: null })
+        .eq("id", plantId);
+      throwIfError(error);
       await loadData();
       setMessage({
         type: "success",
@@ -615,6 +676,13 @@ export default function PlantDetailPage() {
 
   const handleUpdatePlant = async () => {
     if (!plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Cette plante est partagee en lecture seule.",
+      });
+      return;
+    }
 
     try {
       setSavingPlant(true);
@@ -694,9 +762,17 @@ export default function PlantDetailPage() {
 
   const handleDeletePlant = async () => {
     if (!plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut supprimer cette plante.",
+      });
+      return;
+    }
 
     try {
-      await supabase.from("plants").delete().eq("id", plantId);
+      const { error } = await supabase.from("plants").delete().eq("id", plantId);
+      throwIfError(error);
       router.push("/");
     } catch {
       setMessage({
@@ -708,6 +784,13 @@ export default function PlantDetailPage() {
 
   const handleWater = async () => {
     if (!plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut enregistrer un arrosage.",
+      });
+      return;
+    }
 
     setMessage(null);
     try {
@@ -716,12 +799,18 @@ export default function PlantDetailPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      await supabase.from("plants").update({ last_watered_at: now }).eq("id", plantId);
-      await supabase.from("watering_logs").insert({
+      const { error: plantError } = await supabase
+        .from("plants")
+        .update({ last_watered_at: now })
+        .eq("id", plantId);
+      throwIfError(plantError);
+
+      const { error: logError } = await supabase.from("watering_logs").insert({
         plant_id: plantId,
         watered_at: now,
         user_id: user?.id,
       });
+      throwIfError(logError);
 
       await loadData();
       setMessage({
@@ -737,9 +826,18 @@ export default function PlantDetailPage() {
   };
 
   const handleDeleteLog = async (logId: string) => {
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut modifier l'historique.",
+      });
+      return;
+    }
+
     setMessage(null);
     try {
-      await supabase.from("watering_logs").delete().eq("id", logId);
+      const { error } = await supabase.from("watering_logs").delete().eq("id", logId);
+      throwIfError(error);
       await loadData();
       setMessage({
         type: "success",
@@ -765,15 +863,23 @@ export default function PlantDetailPage() {
 
   const handleUpdateLog = async () => {
     if (!editingLogId || !editingLogDate || !plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut modifier l'historique.",
+      });
+      return;
+    }
 
     setMessage(null);
     try {
       const isoDate = new Date(editingLogDate).toISOString();
 
-      await supabase
+      const { error: updateLogError } = await supabase
         .from("watering_logs")
         .update({ watered_at: isoDate })
         .eq("id", editingLogId);
+      throwIfError(updateLogError);
 
       if (history.length > 0) {
         const sortedDates = history
@@ -781,10 +887,11 @@ export default function PlantDetailPage() {
           .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
         if (sortedDates[0]) {
-          await supabase
+          const { error: plantError } = await supabase
             .from("plants")
             .update({ last_watered_at: sortedDates[0] })
             .eq("id", plantId);
+          throwIfError(plantError);
         }
       }
 
@@ -804,6 +911,13 @@ export default function PlantDetailPage() {
 
   const handleShare = async () => {
     if (!plantId || !shareEmail.trim()) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut partager cette plante.",
+      });
+      return;
+    }
 
     const normalizedEmail = shareEmail.trim().toLowerCase();
     setMessage(null);
@@ -839,14 +953,22 @@ export default function PlantDetailPage() {
 
   const handleRemoveShare = async (email: string) => {
     if (!plantId) return;
+    if (!canManage) {
+      setMessage({
+        type: "error",
+        text: "Seul le proprietaire peut retirer un acces partage.",
+      });
+      return;
+    }
 
     setMessage(null);
     try {
-      await supabase
+      const { error } = await supabase
         .from("plant_shares")
         .delete()
         .eq("plant_id", plantId)
         .eq("user_email", email);
+      throwIfError(error);
 
       await loadData();
       setMessage({
@@ -1015,9 +1137,15 @@ export default function PlantDetailPage() {
             Retour
           </Link>
 
-          <button onClick={handleWater} className="btn-primary">
-            Marquer comme arrosee
-          </button>
+          {canManage ? (
+            <button onClick={handleWater} className="btn-primary">
+              Marquer comme arrosee
+            </button>
+          ) : (
+            <div className="soft-card rounded-[20px] px-4 py-3 text-sm font-semibold text-[#516154]">
+              Lecture seule
+            </div>
+          )}
         </div>
 
         <section className="glass-card mb-6 p-6 md:p-8">
@@ -1050,6 +1178,13 @@ export default function PlantDetailPage() {
               }`}
             >
               {message.text}
+            </div>
+          )}
+
+          {!canManage && (
+            <div className="mb-6 rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-semibold text-slate-700">
+              Cette plante est partagee avec toi en lecture seule. Les actions de modification
+              restent reservees au proprietaire.
             </div>
           )}
 
@@ -1099,13 +1234,15 @@ export default function PlantDetailPage() {
             >
               Journal
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("settings")}
-              className={activeTab === "settings" ? "btn-primary" : "btn-secondary"}
-            >
-              Reglages
-            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("settings")}
+                className={activeTab === "settings" ? "btn-primary" : "btn-secondary"}
+              >
+                Reglages
+              </button>
+            )}
           </div>
 
           {activeTab === "weather" && (
@@ -1160,9 +1297,11 @@ export default function PlantDetailPage() {
                     </p>
                   </div>
 
-                  <button onClick={runHealthCheck} disabled={healthLoading} className="btn-secondary">
-                    {healthLoading ? "Analyse..." : "Lancer un diagnostic"}
-                  </button>
+                  {canManage && (
+                    <button onClick={runHealthCheck} disabled={healthLoading} className="btn-secondary">
+                      {healthLoading ? "Analyse..." : "Lancer un diagnostic"}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1219,9 +1358,11 @@ export default function PlantDetailPage() {
                   <p className="subtle-text mt-2 text-sm">{selectedCareProfile.notes}</p>
                 </div>
 
-                <button onClick={applySuggestedCare} className="btn-secondary">
-                  Appliquer les reglages conseilles
-                </button>
+                {canManage && (
+                  <button onClick={applySuggestedCare} className="btn-secondary">
+                    Appliquer les reglages conseilles
+                  </button>
+                )}
               </div>
 
               <div className="pill-row mt-4">
@@ -1268,22 +1409,26 @@ export default function PlantDetailPage() {
             )}
 
             <div className="flex flex-col gap-3">
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={(event) => setNewImageFile(event.target.files?.[0] || null)}
-                className="input-elegant"
-              />
+              {canManage && (
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(event) => setNewImageFile(event.target.files?.[0] || null)}
+                  className="input-elegant"
+                />
+              )}
 
               <div className="flex flex-col gap-3 sm:flex-row">
-                <button
-                  onClick={uploadNewImage}
-                  disabled={!newImageFile || updatingImage}
-                  className="btn-primary"
-                >
-                  {updatingImage ? "Upload..." : "Mettre a jour la photo"}
-                </button>
+                {canManage && (
+                  <button
+                    onClick={uploadNewImage}
+                    disabled={!newImageFile || updatingImage}
+                    className="btn-primary"
+                  >
+                    {updatingImage ? "Upload..." : "Mettre a jour la photo"}
+                  </button>
+                )}
 
                 <button
                   onClick={identifyPlantImage}
@@ -1293,7 +1438,7 @@ export default function PlantDetailPage() {
                   {identifyingImage ? "Analyse..." : "Relancer l'analyse IA"}
                 </button>
 
-                {plant.image_url && (
+                {canManage && plant.image_url && (
                   <button
                     onClick={() => setConfirmState({ kind: "remove-image" })}
                     className="btn-secondary"
@@ -1312,26 +1457,28 @@ export default function PlantDetailPage() {
                 <h2 className="section-title !mb-0">Conseil meteo</h2>
               </div>
 
-              <div className="flex items-center gap-3">
-                <RefreshWeatherButton
-                  plantId={plant.id}
-                  onSuccess={() =>
-                    setMessage({
-                      type: "success",
-                      text: "Meteo actualisee. Les conseils affichent maintenant les dernieres donnees.",
-                    })
-                  }
-                  onError={(errorMessage) =>
-                    setMessage({
-                      type: "error",
-                      text: errorMessage,
-                    })
-                  }
-                />
-                {weatherRefreshing && (
-                  <span className="text-sm subtle-text">Actualisation...</span>
-                )}
-              </div>
+              {canManage && (
+                <div className="flex items-center gap-3">
+                  <RefreshWeatherButton
+                    plantId={plant.id}
+                    onSuccess={() =>
+                      setMessage({
+                        type: "success",
+                        text: "Meteo actualisee. Les conseils affichent maintenant les dernieres donnees.",
+                      })
+                    }
+                    onError={(errorMessage) =>
+                      setMessage({
+                        type: "error",
+                        text: errorMessage,
+                      })
+                    }
+                  />
+                  {weatherRefreshing && (
+                    <span className="text-sm subtle-text">Actualisation...</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {plant.weather_advice ? (
@@ -1562,6 +1709,7 @@ export default function PlantDetailPage() {
               <input
                 value={journalTitle}
                 onChange={(event) => setJournalTitle(event.target.value)}
+                disabled={!canManage}
                 className="input-elegant"
                 placeholder="Ex: Nouvelles pousses"
               />
@@ -1574,6 +1722,7 @@ export default function PlantDetailPage() {
                 accept="image/*"
                 capture="environment"
                 onChange={(event) => setNewImageFile(event.target.files?.[0] || null)}
+                disabled={!canManage}
                 className="input-elegant"
               />
             </div>
@@ -1584,13 +1733,18 @@ export default function PlantDetailPage() {
             <textarea
               value={journalNote}
               onChange={(event) => setJournalNote(event.target.value)}
+              disabled={!canManage}
               className="textarea-elegant"
               placeholder="Ex: feuilles plus fermes, terre seche, apparition d'une fleur..."
             />
           </div>
 
           <div className="mt-5">
-            <button onClick={saveJournalEntry} disabled={savingJournal} className="btn-secondary">
+            <button
+              onClick={saveJournalEntry}
+              disabled={savingJournal || !canManage}
+              className="btn-secondary"
+            >
               {savingJournal ? "Ajout..." : "Ajouter au journal"}
             </button>
           </div>
@@ -1645,6 +1799,7 @@ export default function PlantDetailPage() {
                     onChange={(event) =>
                       setNotes({ ...notes, repottedAt: event.target.value })
                     }
+                    disabled={!canManage}
                     className="input-elegant"
                   />
                 </div>
@@ -1657,6 +1812,7 @@ export default function PlantDetailPage() {
                     onChange={(event) =>
                       setNotes({ ...notes, fertilizerAddedAt: event.target.value })
                     }
+                    disabled={!canManage}
                     className="input-elegant"
                   />
                 </div>
@@ -1668,6 +1824,7 @@ export default function PlantDetailPage() {
                     onChange={(event) =>
                       setNotes({ ...notes, locationLabel: event.target.value })
                     }
+                    disabled={!canManage}
                     className="input-elegant"
                     placeholder="Ex: salon, balcon, chambre"
                   />
@@ -1680,6 +1837,7 @@ export default function PlantDetailPage() {
                     onChange={(event) =>
                       setNotes({ ...notes, potSize: event.target.value })
                     }
+                    disabled={!canManage}
                     className="input-elegant"
                     placeholder="Ex: 18 cm"
                   />
@@ -1692,6 +1850,7 @@ export default function PlantDetailPage() {
                     onChange={(event) =>
                       setNotes({ ...notes, substrateType: event.target.value })
                     }
+                    disabled={!canManage}
                     className="input-elegant"
                     placeholder="Ex: terreau universel, melange drainant"
                   />
@@ -1705,6 +1864,7 @@ export default function PlantDetailPage() {
                     onChange={(event) =>
                       setNotes({ ...notes, purchaseDate: event.target.value })
                     }
+                    disabled={!canManage}
                     className="input-elegant"
                   />
                 </div>
@@ -1717,6 +1877,7 @@ export default function PlantDetailPage() {
                   onChange={(event) =>
                     setNotes({ ...notes, leafStatus: event.target.value })
                   }
+                  disabled={!canManage}
                   className="textarea-elegant"
                   placeholder="Ex: feuilles jaunes, nouvelles pousses, terre tres seche..."
                 />
@@ -1730,6 +1891,7 @@ export default function PlantDetailPage() {
                     onChange={(event) =>
                       setNotes({ ...notes, petsPresent: event.target.checked })
                     }
+                    disabled={!canManage}
                     className="checkbox-elegant"
                   />
                   <div>
@@ -1746,6 +1908,7 @@ export default function PlantDetailPage() {
                     onChange={(event) =>
                       setNotes({ ...notes, childrenPresent: event.target.checked })
                     }
+                    disabled={!canManage}
                     className="checkbox-elegant"
                   />
                   <div>
@@ -1760,7 +1923,7 @@ export default function PlantDetailPage() {
                 <p className="text-sm subtle-text">
                   Note ici les infos utiles pour ne plus hesiter au prochain controle.
                 </p>
-                <button onClick={saveNotes} className="btn-secondary">
+                <button onClick={saveNotes} disabled={!canManage} className="btn-secondary">
                   {savingNotes ? "Sauvegarde..." : "Enregistrer les notes"}
                 </button>
               </div>
@@ -1812,24 +1975,26 @@ export default function PlantDetailPage() {
                         <p className="history-date">{formatFullDate(log.watered_at)}</p>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => startEditLog(log)}
-                          className="btn-secondary"
-                          title="Modifier"
-                        >
-                          Modifier
-                        </button>
-                        <button
-                          onClick={() =>
-                            setConfirmState({ kind: "delete-log", logId: log.id })
-                          }
-                          className="btn-secondary"
-                          title="Supprimer"
-                        >
-                          Supprimer
-                        </button>
-                      </div>
+                      {canManage && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => startEditLog(log)}
+                            className="btn-secondary"
+                            title="Modifier"
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            onClick={() =>
+                              setConfirmState({ kind: "delete-log", logId: log.id })
+                            }
+                            className="btn-secondary"
+                            title="Supprimer"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
