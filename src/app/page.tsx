@@ -641,14 +641,14 @@ export default function HomePage() {
           <div className="glass-card mb-6 flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="eyebrow mb-2">Preferences</p>
-              <h2 className="section-title !mb-0">Regle ton espace</h2>
+              <h2 className="section-title !mb-0">Ouvre les parametres</h2>
               <p className="subtle-text mt-2 text-sm">
-                Choisis l&apos;affichage, active les rappels et cree tes lieux.
+                Regle l&apos;affichage, les rappels et tes lieux.
               </p>
             </div>
             <div>
               <Link href="/settings" className="btn-secondary">
-                Ouvrir
+                Parametres
               </Link>
             </div>
           </div>
