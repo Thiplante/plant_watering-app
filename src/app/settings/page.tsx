@@ -54,7 +54,9 @@ export default function SettingsPage() {
             email: profile.email,
             display_name: profile.display_name?.trim() || null,
             household_name: profile.household_name?.trim() || null,
+            default_city: profile.default_city?.trim() || null,
             experience_level: profile.experience_level || "debutant",
+            interface_mode: profile.interface_mode || "guided",
             notification_opt_in: profile.notification_opt_in,
             onboarding_completed: true,
           },
@@ -155,12 +157,12 @@ export default function SettingsPage() {
         </Link>
 
         <section className="glass-card mt-6 p-6 md:p-8">
-          <p className="eyebrow mb-3">Profil</p>
+          <p className="eyebrow mb-3">Preferences</p>
           <h1 className="hero-title" style={{ fontSize: "clamp(2rem, 5vw, 3.4rem)" }}>
-            Mon espace
+            Preferences et lieux
           </h1>
           <p className="subtle-text mt-3">
-            Un profil simple, puis des lieux clairs pour ranger les plantes par espace.
+            Regle une fois ton experience et tes lieux, puis l&apos;app s&apos;adapte au quotidien.
           </p>
 
           {message ? (
@@ -185,12 +187,22 @@ export default function SettingsPage() {
             </div>
 
             <div className="field">
-              <label className="field-label">Maison / foyer</label>
+              <label className="field-label">Foyer</label>
               <input
                 value={profile.household_name || ""}
                 onChange={(event) => setProfile({ ...profile, household_name: event.target.value })}
                 className="input-elegant"
                 placeholder="Ex: Appartement Paris"
+              />
+            </div>
+
+            <div className="field">
+              <label className="field-label">Ville par defaut</label>
+              <input
+                value={profile.default_city || ""}
+                onChange={(event) => setProfile({ ...profile, default_city: event.target.value })}
+                className="input-elegant"
+                placeholder="Ex: Bordeaux"
               />
             </div>
 
@@ -207,6 +219,28 @@ export default function SettingsPage() {
                 <option value="intermediaire">Intermediaire</option>
                 <option value="passionne">Passionne</option>
               </select>
+            </div>
+
+            <div className="field">
+              <label className="field-label">Affichage</label>
+              <select
+                value={profile.interface_mode || "guided"}
+                onChange={(event) =>
+                  setProfile({
+                    ...profile,
+                    interface_mode: event.target.value as Profile["interface_mode"],
+                  })
+                }
+                className="select-elegant"
+              >
+                <option value="simple">Simple</option>
+                <option value="guided">Guide</option>
+                <option value="expert">Expert</option>
+              </select>
+              <p className="subtle-text text-sm">
+                `Simple` montre l&apos;essentiel, `Guide` explique un peu plus, `Expert` affiche
+                tous les details.
+              </p>
             </div>
 
             <label className="checkbox-row">
@@ -229,7 +263,7 @@ export default function SettingsPage() {
             </label>
 
             <button type="submit" disabled={savingProfile} className="btn-primary">
-              {savingProfile ? "Enregistrement..." : "Enregistrer le profil"}
+              {savingProfile ? "Enregistrement..." : "Enregistrer les preferences"}
             </button>
           </form>
         </section>

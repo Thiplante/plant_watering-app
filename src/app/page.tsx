@@ -568,6 +568,7 @@ export default function HomePage() {
   const normalFiltered = filteredPlants.filter((plant) => getStatus(plant) === "ok");
   const fallbackNotifications = getDashboardNotifications(plants);
   const unreadCount = notifications.filter((notification) => !notification.is_read).length;
+  const interfaceMode = profile?.interface_mode || "guided";
   const priorityLabel =
     overdue.length > 0
       ? `${overdue.length} plante${overdue.length > 1 ? "s" : ""} en retard a traiter en premier`
@@ -621,6 +622,7 @@ export default function HomePage() {
           </div>
         </div>
 
+        {interfaceMode !== "simple" && (
         <section className="glass-card mb-6 p-6">
           <p className="eyebrow mb-3">Aujourd&apos;hui</p>
           <h2 className="section-title !mb-0">Que faire maintenant ?</h2>
@@ -641,6 +643,7 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        )}
 
         <section className="glass-card mb-6 p-6">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
@@ -714,6 +717,7 @@ export default function HomePage() {
           </div>
         )}
 
+        {interfaceMode === "expert" && (
         <section className="glass-card mb-10 p-6 md:p-8">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -782,6 +786,7 @@ export default function HomePage() {
             </div>
           )}
         </section>
+        )}
 
         <Section
           title="En retard"

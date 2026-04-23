@@ -56,7 +56,9 @@ export type Profile = {
   email: string | null;
   display_name: string | null;
   household_name: string | null;
+  default_city: string | null;
   experience_level: string | null;
+  interface_mode: "simple" | "guided" | "expert";
   notification_opt_in: boolean;
   onboarding_completed: boolean;
   created_at?: string | null;
