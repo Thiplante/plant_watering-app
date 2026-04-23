@@ -10,7 +10,13 @@ import { ensureProfile } from "@/lib/profiles";
 import type { PlantLocation, Profile } from "@/lib/types";
 
 function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    if (error.message.includes("schema cache") || error.message.includes("column")) {
+      return "La base de donnees n'est pas a jour pour le profil. Applique la derniere migration Supabase puis recharge la page.";
+    }
+
+    return error.message;
+  }
 
   if (
     error &&
@@ -18,6 +24,10 @@ function getErrorMessage(error: unknown, fallback: string) {
     "message" in error &&
     typeof error.message === "string"
   ) {
+    if (error.message.includes("schema cache") || error.message.includes("column")) {
+      return "La base de donnees n'est pas a jour pour le profil. Applique la derniere migration Supabase puis recharge la page.";
+    }
+
     return error.message;
   }
 
@@ -191,10 +201,10 @@ export default function SettingsPage() {
         <section className="glass-card mt-6 p-6 md:p-8">
           <p className="eyebrow mb-3">Preferences</p>
           <h1 className="hero-title" style={{ fontSize: "clamp(2rem, 5vw, 3.4rem)" }}>
-            Mon profil
+            Preferences
           </h1>
           <p className="subtle-text mt-3">
-            Quelques reglages simples pour personnaliser l&apos;application.
+            Regle l&apos;affichage et les rappels en quelques secondes.
           </p>
 
           {message ? (
@@ -208,51 +218,6 @@ export default function SettingsPage() {
           ) : null}
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-            <div className="field">
-              <label className="field-label">Nom visible</label>
-              <input
-                value={profile.display_name || ""}
-                onChange={(event) => setProfile({ ...profile, display_name: event.target.value })}
-                className="input-elegant"
-                placeholder="Ex: Thibaut"
-              />
-            </div>
-
-            <div className="field">
-              <label className="field-label">Foyer</label>
-              <input
-                value={profile.household_name || ""}
-                onChange={(event) => setProfile({ ...profile, household_name: event.target.value })}
-                className="input-elegant"
-                placeholder="Ex: Appartement Paris"
-              />
-            </div>
-
-            <div className="field">
-              <label className="field-label">Ville par defaut</label>
-              <input
-                value={profile.default_city || ""}
-                onChange={(event) => setProfile({ ...profile, default_city: event.target.value })}
-                className="input-elegant"
-                placeholder="Ex: Bordeaux"
-              />
-            </div>
-
-            <div className="field">
-              <label className="field-label">Niveau</label>
-              <select
-                value={profile.experience_level || "debutant"}
-                onChange={(event) =>
-                  setProfile({ ...profile, experience_level: event.target.value })
-                }
-                className="select-elegant"
-              >
-                <option value="debutant">Debutant</option>
-                <option value="intermediaire">Intermediaire</option>
-                <option value="passionne">Passionne</option>
-              </select>
-            </div>
-
             <div className="field">
               <label className="field-label">Affichage</label>
               <select
@@ -270,13 +235,13 @@ export default function SettingsPage() {
                 <option value="expert">Expert</option>
               </select>
               <p className="subtle-text text-sm">
-                `Simple` montre l&apos;essentiel, `Guide` explique un peu plus, `Expert` affiche
-                tous les details.
+                `Simple` montre l&apos;essentiel, `Guide` accompagne un peu plus, `Expert` affiche
+                plus d&apos;informations.
               </p>
             </div>
 
             <button type="submit" disabled={savingProfile} className="btn-primary">
-              {savingProfile ? "Enregistrement..." : "Enregistrer les preferences"}
+              {savingProfile ? "Enregistrement..." : "Enregistrer"}
             </button>
           </form>
         </section>

@@ -640,15 +640,15 @@ export default function HomePage() {
         {!profile?.onboarding_completed && (
           <div className="glass-card mb-6 flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="eyebrow mb-2">Profil</p>
-              <h2 className="section-title !mb-0">Complete ton profil</h2>
+              <p className="eyebrow mb-2">Preferences</p>
+              <h2 className="section-title !mb-0">Regle ton espace</h2>
               <p className="subtle-text mt-2 text-sm">
-                Quelques infos pour personnaliser l&apos;app.
+                Choisis l&apos;affichage, active les rappels et cree tes lieux.
               </p>
             </div>
             <div>
               <Link href="/settings" className="btn-secondary">
-                Completer
+                Ouvrir
               </Link>
             </div>
           </div>
