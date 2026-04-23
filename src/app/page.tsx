@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useState } from "react";
-import BrowserNotificationPrompt from "@/components/BrowserNotificationPrompt";
 import {
   getPlantDisplayName,
   getPlantIdentitySubtitle,
@@ -654,8 +653,6 @@ export default function HomePage() {
             </div>
           </div>
         )}
-
-        {!profile?.notification_opt_in && <BrowserNotificationPrompt />}
 
         <div className="topbar-blur mb-6 p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

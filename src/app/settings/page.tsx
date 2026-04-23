@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import BrowserNotificationPrompt from "@/components/BrowserNotificationPrompt";
 import { supabase } from "@/lib/supabase";
 import { getUserLocations } from "@/lib/locations";
 import { ensureProfile } from "@/lib/profiles";
@@ -71,6 +72,7 @@ export default function SettingsPage() {
       }
 
       const payload = {
+        id: user.id,
         email: user.email?.toLowerCase() || null,
         display_name: profile.display_name?.trim() || null,
         household_name: profile.household_name?.trim() || null,
@@ -81,35 +83,15 @@ export default function SettingsPage() {
         onboarding_completed: true,
       };
 
-      const { data: updatedProfile, error: updateError } = await supabase
+      const { error: saveError } = await supabase
         .from("profiles")
-        .update(payload)
-        .eq("id", user.id)
-        .select("*")
-        .maybeSingle();
+        .upsert(payload, { onConflict: "id" });
 
-      if (updateError) {
-        throw updateError;
+      if (saveError) {
+        throw saveError;
       }
 
-      let nextProfile = updatedProfile;
-
-      if (!nextProfile) {
-        const { data: insertedProfile, error: insertError } = await supabase
-          .from("profiles")
-          .insert({
-            id: user.id,
-            ...payload,
-          })
-          .select("*")
-          .single();
-
-        if (insertError) {
-          throw insertError;
-        }
-
-        nextProfile = insertedProfile;
-      }
+      const nextProfile = await ensureProfile();
 
       if (!nextProfile) {
         throw new Error("Le profil n'a pas pu etre enregistre.");
@@ -293,30 +275,20 @@ export default function SettingsPage() {
               </p>
             </div>
 
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={profile.notification_opt_in}
-                onChange={(event) =>
-                  setProfile({ ...profile, notification_opt_in: event.target.checked })
-                }
-                className="checkbox-elegant"
-              />
-              <div>
-                <p className="text-[0.95rem] font-extrabold text-[#183624]">
-                  Recevoir les rappels
-                </p>
-                <p className="subtle-text text-sm">
-                  Active les rappels navigateur et les futures alertes email.
-                </p>
-              </div>
-            </label>
-
             <button type="submit" disabled={savingProfile} className="btn-primary">
               {savingProfile ? "Enregistrement..." : "Enregistrer les preferences"}
             </button>
           </form>
         </section>
+
+        <BrowserNotificationPrompt
+          showWhenGranted
+          onPermissionChange={(granted) =>
+            setProfile((current) =>
+              current ? { ...current, notification_opt_in: granted } : current
+            )
+          }
+        />
 
         <section className="glass-card mt-6 p-6 md:p-8">
           <p className="eyebrow mb-3">Lieux</p>

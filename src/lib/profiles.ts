@@ -8,13 +8,47 @@ export async function ensureProfile() {
 
   if (!user) return null;
 
-  const payload = {
-    id: user.id,
-    email: user.email?.toLowerCase() || null,
-  };
+  const normalizedEmail = user.email?.toLowerCase() || null;
+  const { data: existingProfile, error: selectError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+  if (selectError) {
+    throw selectError;
+  }
 
-  const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  return (data || null) as Profile | null;
+  if (existingProfile) {
+    if (existingProfile.email !== normalizedEmail) {
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ email: normalizedEmail })
+        .eq("id", user.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+    }
+
+    return {
+      ...existingProfile,
+      email: normalizedEmail,
+    } as Profile;
+  }
+
+  const { data: insertedProfile, error: insertError } = await supabase
+    .from("profiles")
+    .insert({
+      id: user.id,
+      email: normalizedEmail,
+    })
+    .select("*")
+    .single();
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  return insertedProfile as Profile;
 }
