@@ -84,10 +84,6 @@ export default function SettingsPage() {
       const payload = {
         id: user.id,
         email: user.email?.toLowerCase() || null,
-        display_name: profile.display_name?.trim() || null,
-        household_name: profile.household_name?.trim() || null,
-        default_city: profile.default_city?.trim() || null,
-        experience_level: profile.experience_level || "debutant",
         interface_mode: profile.interface_mode || "guided",
         notification_opt_in: profile.notification_opt_in,
         onboarding_completed: true,
