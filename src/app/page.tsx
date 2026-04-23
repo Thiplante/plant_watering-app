@@ -51,6 +51,7 @@ type SectionProps = {
   canQuickWater: (plant: Plant) => boolean;
   getDates: (plant: Plant) => PlantDateInfo;
   getLocationName: (plant: Plant) => string | null;
+  emptyMessage?: string;
 };
 
 function throwIfError(error: { message: string } | null) {
@@ -84,10 +85,11 @@ function Section({
   canQuickWater,
   getDates,
   getLocationName,
+  emptyMessage = "Aucune plante dans cette categorie.",
 }: SectionProps) {
   return (
-    <section className="mb-10">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <section className="mb-8">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="section-title !mb-0">
             {title} ({plants.length})
@@ -97,7 +99,9 @@ function Section({
       </div>
 
       {plants.length === 0 ? (
-        <div className="soft-card center-empty">Aucune plante dans cette categorie.</div>
+        <div className="soft-card center-empty !min-h-[120px]">
+          {emptyMessage}
+        </div>
       ) : (
         <div className="grid-elegant grid-elegant-3">
           {plants.map((plant) => {
@@ -608,7 +612,7 @@ export default function HomePage() {
 
   const overdueFiltered = filteredPlants.filter((plant) => getStatus(plant) === "overdue");
   const todayFiltered = filteredPlants.filter((plant) => getStatus(plant) === "today");
-  const normalFiltered = filteredPlants.filter((plant) => getStatus(plant) === "ok");
+  const unknownFiltered = filteredPlants.filter((plant) => getStatus(plant) === "unknown");
   const fallbackNotifications = getDashboardNotifications(plants);
   const unreadCount = notifications.filter((notification) => !notification.is_read).length;
   const interfaceMode = profile?.interface_mode || "guided";
@@ -618,6 +622,8 @@ export default function HomePage() {
       : today.length > 0
         ? `${today.length} plante${today.length > 1 ? "s" : ""} a verifier aujourd'hui`
         : "Aucune urgence detectee pour le moment";
+  const priorityPlants = [...overdueFiltered, ...todayFiltered];
+  const hasVisiblePlants = filteredPlants.length > 0;
 
   if (loading) {
     return (
@@ -633,45 +639,56 @@ export default function HomePage() {
     <main className="page-shell">
       <div className="page-container">
         {!profile?.onboarding_completed && (
-          <div className="glass-card mb-6 p-6">
-            <p className="eyebrow mb-2">Bienvenue</p>
-            <h2 className="section-title !mb-0">Finaliser mon espace</h2>
-            <p className="subtle-text mt-2 text-sm">
-              Ajoute ton nom, ton foyer et tes preferences pour rendre l&apos;application plus utile
-              et plus personnelle.
-            </p>
-            <div className="mt-4">
+          <div className="glass-card mb-6 flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="eyebrow mb-2">Profil</p>
+              <h2 className="section-title !mb-0">Complete ton profil</h2>
+              <p className="subtle-text mt-2 text-sm">
+                Quelques infos pour personnaliser l&apos;app.
+              </p>
+            </div>
+            <div>
               <Link href="/settings" className="btn-secondary">
-                Completer mon profil
+                Completer
               </Link>
             </div>
           </div>
         )}
 
-        <BrowserNotificationPrompt />
+        {!profile?.notification_opt_in && <BrowserNotificationPrompt />}
 
         <div className="topbar-blur mb-6 p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h1 className="hero-title">Mes plantes</h1>
               <p className="subtle-text mt-2">
-                L&apos;essentiel pour savoir quoi arroser maintenant, et quoi laisser tranquille.
+                L&apos;essentiel, sans detour.
               </p>
             </div>
 
-            <Link href="/plants/new" className="btn-primary">
-              Ajouter une plante
-            </Link>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/plants/new" className="btn-primary">
+                Ajouter
+              </Link>
+            </div>
           </div>
         </div>
 
-        {interfaceMode !== "simple" && (
-        <section className="glass-card mb-6 p-6">
-          <p className="eyebrow mb-3">Aujourd&apos;hui</p>
-          <h2 className="section-title !mb-0">Que faire maintenant ?</h2>
-          <p className="mt-3 text-base font-semibold text-[#183624]">{priorityLabel}</p>
+        <section className="glass-card mb-5 p-5 md:p-6">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="eyebrow mb-2">Aujourd&apos;hui</p>
+              <h2 className="section-title !mb-0">A faire</h2>
+              <p className="subtle-text mt-2 text-sm">{priorityLabel}</p>
+            </div>
+            <div className="pill-row">
+              <span className="pill">{plants.length} plantes</span>
+              <span className="pill">{overdue.length} en retard</span>
+              <span className="pill">{today.length} a verifier</span>
+            </div>
+          </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             <div className="status-card">
               <span className="status-label">En retard</span>
               <span className="status-value">{overdue.length}</span>
@@ -681,26 +698,24 @@ export default function HomePage() {
               <span className="status-value">{today.length}</span>
             </div>
             <div className="status-card">
-              <span className="status-label">Total</span>
-              <span className="status-value">{plants.length}</span>
+              <span className="status-label">Stables</span>
+              <span className="status-value">{plants.filter((plant) => getStatus(plant) === "ok").length}</span>
+            </div>
+            <div className="status-card">
+              <span className="status-label">Sans repere</span>
+              <span className="status-value">{plants.filter((plant) => getStatus(plant) === "unknown").length}</span>
             </div>
           </div>
         </section>
-        )}
 
-        <section className="glass-card mb-6 p-6">
+        <section className="glass-card mb-5 p-5 md:p-6">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="eyebrow mb-2">Filtres</p>
-              <h2 className="section-title !mb-0">Trouver rapidement une plante</h2>
+              <p className="eyebrow mb-2">Recherche</p>
+              <h2 className="section-title !mb-0">Trouver</h2>
               <p className="subtle-text mt-2 text-sm">
-                Recherche, filtre et tri sans surcharger l&apos;ecran principal.
+                Recherche, filtre, ouvre.
               </p>
-            </div>
-
-            <div className="pill-row">
-              <span className="pill">{profileCoverage} profils experts reconnus</span>
-              <span className="pill">{heatSensitiveCount} plantes sensibles a la chaleur</span>
             </div>
           </div>
 
@@ -709,7 +724,7 @@ export default function HomePage() {
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Rechercher une plante, une ville ou un nom scientifique"
+              placeholder="Nom, ville ou nom scientifique"
               className="input-elegant"
             />
 
@@ -718,10 +733,10 @@ export default function HomePage() {
               onChange={(event) => setFilterMode(event.target.value as FilterMode)}
               className="select-elegant"
             >
-              <option value="all">Toutes les plantes</option>
+              <option value="all">Toutes</option>
               <option value="overdue">En retard</option>
-              <option value="today">A verifier aujourd&apos;hui</option>
-              <option value="safe">Profils enrichis</option>
+              <option value="today">A verifier</option>
+              <option value="safe">Profils reconnus</option>
               <option value="watch">A surveiller</option>
             </select>
 
@@ -743,10 +758,15 @@ export default function HomePage() {
               onChange={(event) => setSortMode(event.target.value as SortMode)}
               className="select-elegant"
             >
-              <option value="urgency">Trier par urgence</option>
-              <option value="name">Trier par nom</option>
-              <option value="recent">Trier par ajout recent</option>
+              <option value="urgency">Urgence</option>
+              <option value="name">Nom</option>
+              <option value="recent">Recent</option>
             </select>
+          </div>
+
+          <div className="mt-4 pill-row">
+            <span className="pill">{profileCoverage} profils reconnus</span>
+            <span className="pill">{heatSensitiveCount} sensibles a la chaleur</span>
           </div>
         </section>
 
@@ -760,14 +780,28 @@ export default function HomePage() {
           </div>
         )}
 
+        {priorityPlants.length > 0 && (
+          <Section
+            title="Prioritaires"
+            subtitle="Commence ici."
+            plants={priorityPlants}
+            onQuickWater={handleQuickWater}
+            canQuickWater={(plant) => plant.owner_id === userId}
+            getDates={getDates}
+            getLocationName={(plant) =>
+              plant.location_id ? locationMap.get(plant.location_id) || null : null
+            }
+          />
+        )}
+
         {interfaceMode === "expert" && (
-        <section className="glass-card mb-10 p-6 md:p-8">
+        <section className="glass-card mb-8 p-5 md:p-6">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="eyebrow mb-2">Rappels</p>
-              <h2 className="section-title !mb-0">A faire</h2>
+              <h2 className="section-title !mb-0">Rappels</h2>
               <p className="subtle-text mt-2 text-sm">
-                Les rappels prioritaires sont regroupes ici.
+                Les alertes les plus utiles.
               </p>
             </div>
 
@@ -831,39 +865,43 @@ export default function HomePage() {
         </section>
         )}
 
-        <Section
-          title="En retard"
-          subtitle="A traiter en premier."
-          plants={overdueFiltered}
-          onQuickWater={handleQuickWater}
-          canQuickWater={(plant) => plant.owner_id === userId}
-          getDates={getDates}
-          getLocationName={(plant) =>
-            plant.location_id ? locationMap.get(plant.location_id) || null : null
-          }
-        />
-        <Section
-          title="A arroser aujourd'hui"
-          subtitle="A verifier aujourd&apos;hui."
-          plants={todayFiltered}
-          onQuickWater={handleQuickWater}
-          canQuickWater={(plant) => plant.owner_id === userId}
-          getDates={getDates}
-          getLocationName={(plant) =>
-            plant.location_id ? locationMap.get(plant.location_id) || null : null
-          }
-        />
-        <Section
-          title="Stable"
-          subtitle="Aucune action immediate."
-          plants={normalFiltered}
-          onQuickWater={handleQuickWater}
-          canQuickWater={(plant) => plant.owner_id === userId}
-          getDates={getDates}
-          getLocationName={(plant) =>
-            plant.location_id ? locationMap.get(plant.location_id) || null : null
-          }
-        />
+        {hasVisiblePlants ? (
+          <Section
+            title="Toutes les plantes"
+            subtitle="Toute la collection selon tes filtres."
+            plants={filteredPlants}
+            onQuickWater={handleQuickWater}
+            canQuickWater={(plant) => plant.owner_id === userId}
+            getDates={getDates}
+            getLocationName={(plant) =>
+              plant.location_id ? locationMap.get(plant.location_id) || null : null
+            }
+            emptyMessage="Aucune plante ne correspond a tes filtres."
+          />
+        ) : (
+          <section className="glass-card p-8 md:p-10">
+            <p className="eyebrow mb-2">Resultat</p>
+            <h2 className="section-title !mb-0">Aucune plante a afficher</h2>
+            <p className="subtle-text mt-3 text-sm">
+              Ajuste les filtres ou ajoute une plante.
+            </p>
+            <div className="mt-5">
+              <Link href="/plants/new" className="btn-secondary">
+                Ajouter
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {interfaceMode !== "simple" && unknownFiltered.length > 0 && (
+          <section className="soft-card mb-8 p-5">
+            <p className="eyebrow mb-2">A completer</p>
+            <h2 className="section-title !mb-0">Plantes sans date utile</h2>
+            <p className="subtle-text mt-2 text-sm">
+              Certaines plantes n&apos;ont pas encore assez d&apos;infos.
+            </p>
+          </section>
+        )}
       </div>
     </main>
   );

@@ -8,6 +8,21 @@ import { getUserLocations } from "@/lib/locations";
 import { ensureProfile } from "@/lib/profiles";
 import type { PlantLocation, Profile } from "@/lib/types";
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message;
+
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -46,32 +61,67 @@ export default function SettingsPage() {
       setSavingProfile(true);
       setMessage(null);
 
-      const { error } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            id: profile.id,
-            email: profile.email,
-            display_name: profile.display_name?.trim() || null,
-            household_name: profile.household_name?.trim() || null,
-            default_city: profile.default_city?.trim() || null,
-            experience_level: profile.experience_level || "debutant",
-            interface_mode: profile.interface_mode || "guided",
-            notification_opt_in: profile.notification_opt_in,
-            onboarding_completed: true,
-          },
-          { onConflict: "id" }
-        );
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      if (error) {
-        throw error;
+      if (!user) {
+        router.replace("/login");
+        return;
       }
+
+      const payload = {
+        email: user.email?.toLowerCase() || null,
+        display_name: profile.display_name?.trim() || null,
+        household_name: profile.household_name?.trim() || null,
+        default_city: profile.default_city?.trim() || null,
+        experience_level: profile.experience_level || "debutant",
+        interface_mode: profile.interface_mode || "guided",
+        notification_opt_in: profile.notification_opt_in,
+        onboarding_completed: true,
+      };
+
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from("profiles")
+        .update(payload)
+        .eq("id", user.id)
+        .select("*")
+        .maybeSingle();
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      let nextProfile = updatedProfile;
+
+      if (!nextProfile) {
+        const { data: insertedProfile, error: insertError } = await supabase
+          .from("profiles")
+          .insert({
+            id: user.id,
+            ...payload,
+          })
+          .select("*")
+          .single();
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        nextProfile = insertedProfile;
+      }
+
+      if (!nextProfile) {
+        throw new Error("Le profil n'a pas pu etre enregistre.");
+      }
+
+      setProfile(nextProfile as Profile);
 
       setMessage({ type: "success", text: "Profil enregistre." });
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Impossible d'enregistrer le profil.",
+        text: getErrorMessage(error, "Impossible d'enregistrer le profil."),
       });
     } finally {
       setSavingProfile(false);
@@ -113,7 +163,7 @@ export default function SettingsPage() {
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Impossible d'ajouter ce lieu.",
+        text: getErrorMessage(error, "Impossible d'ajouter ce lieu."),
       });
     } finally {
       setSavingLocation(false);
@@ -134,7 +184,7 @@ export default function SettingsPage() {
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Impossible de supprimer ce lieu.",
+        text: getErrorMessage(error, "Impossible de supprimer ce lieu."),
       });
     }
   };
@@ -159,10 +209,10 @@ export default function SettingsPage() {
         <section className="glass-card mt-6 p-6 md:p-8">
           <p className="eyebrow mb-3">Preferences</p>
           <h1 className="hero-title" style={{ fontSize: "clamp(2rem, 5vw, 3.4rem)" }}>
-            Preferences et lieux
+            Mon profil
           </h1>
           <p className="subtle-text mt-3">
-            Regle une fois ton experience et tes lieux, puis l&apos;app s&apos;adapte au quotidien.
+            Quelques reglages simples pour personnaliser l&apos;application.
           </p>
 
           {message ? (
@@ -270,10 +320,9 @@ export default function SettingsPage() {
 
         <section className="glass-card mt-6 p-6 md:p-8">
           <p className="eyebrow mb-3">Lieux</p>
-          <h2 className="section-title !mb-0">Ou vivent tes plantes ?</h2>
+          <h2 className="section-title !mb-0">Mes lieux</h2>
           <p className="subtle-text mt-3 text-sm">
-            Cree tes endroits une fois, puis attribue chaque plante a un lieu comme salon,
-            balcon, chambre ou veranda.
+            Cree des lieux simples comme salon, balcon ou bureau.
           </p>
 
           <div className="mt-6 grid gap-4 md:grid-cols-[1.4fr_1fr_auto]">

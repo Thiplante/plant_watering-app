@@ -59,14 +59,13 @@ export default function BrowserNotificationPrompt() {
   return (
     <div className="soft-card mb-6 p-5">
       <p className="eyebrow mb-2">Notifications</p>
-      <h2 className="section-title !mb-0">Recevoir les rappels ici</h2>
+      <h2 className="section-title !mb-0">Activer les rappels</h2>
       <p className="subtle-text mt-2 text-sm">
-        Active les notifications navigateur pour preparer les rappels web. L&apos;application
-        enregistre ici ton accord et affiche une notification de test immediatement.
+        Autorise les notifications pour recevoir un test immediat.
       </p>
       <div className="mt-4">
         <button onClick={enableNotifications} disabled={saving} className="btn-secondary">
-          {saving ? "Activation..." : "Activer les rappels navigateur"}
+          {saving ? "Activation..." : "Activer"}
         </button>
       </div>
     </div>
